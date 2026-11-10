@@ -4,14 +4,15 @@ genai_jobs/engines/ats_engine.py
 Direct Career Portal API Engine — queries official ATS JSON/GraphQL endpoints
 and structured SSR career pages directly without relying solely on aggregators.
 
-Supported Direct Career Portal Adapters (19 portals + Amazon API = 20/36)
+Supported Direct Career Portal Adapters (22 portals + Amazon API = 23/38)
 ─────────────────────────────────────────────────────────────────────────
 * Google Careers       (`www.google.com/about/careers/applications/jobs/results/`)
 * Workday CXS API      (`*.myworkdayjobs.com` / `myworkdaysite.com`)
                        Salesforce, Adobe, Micron, Berkadia, Disney,
-                       Invesco, Quantiphi, Wells Fargo, Caterpillar
+                       Invesco, Quantiphi, Wells Fargo, Caterpillar,
+                       Visa, Mastercard
 * Oracle Cloud HCM API (`*.fa.oraclecloud.com/hcmRestApi/...`)
-                       JP Morgan Chase, CHUBB, Honeywell
+                       JP Morgan Chase, CHUBB, Honeywell, American Express
 * Goldman Sachs API    (`api-higher.gs.com/gateway/api/v1/graphql`)
 * Deloitte South Asia  (`southasiacareers.deloitte.com`)
 * Synopsys Career Site (`careers.synopsys.com`)
@@ -318,6 +319,16 @@ _WORKDAY_PORTALS: dict[str, dict[str, str]] = {
         "tenant": "cat",
         "site": "CaterpillarCareers",
     },
+    "Visa": {
+        "host": "visa.wd5.myworkdayjobs.com",
+        "tenant": "visa",
+        "site": "visa",
+    },
+    "Mastercard": {
+        "host": "mastercard.wd1.myworkdayjobs.com",
+        "tenant": "mastercard",
+        "site": "CorporateCareers",
+    },
 }
 
 
@@ -497,7 +508,7 @@ def _fetch_workday_company(
     return jobs
 
 
-# ─── Oracle Cloud HCM JSON API (JPMC, CHUBB, Honeywell) ───────────────────────
+# ─── Oracle Cloud HCM JSON API (JPMC, CHUBB, Honeywell, American Express) ────
 
 _ORACLE_PORTALS: dict[str, dict[str, str]] = {
     "JP Morgan Chase": {
@@ -511,6 +522,10 @@ _ORACLE_PORTALS: dict[str, dict[str, str]] = {
     "Honeywell": {
         "host": "ibqbjb.fa.ocs.oraclecloud.com",
         "site": "CX_1001",
+    },
+    "American Express": {
+        "host": "egug.fa.us2.oraclecloud.com",
+        "site": "CX_1",
     },
 }
 

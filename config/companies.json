@@ -97,10 +97,6 @@
       "ats_domains": ["careers.invesco.com", "invesco.wd1.myworkdayjobs.com/IVZ"]
     },
     {
-      "name": "Tiger Analytics",
-      "ats_domains": ["tigeranalytics.com/careers", "jobs.lever.co/tigeranalytics"]
-    },
-    {
       "name": "Verisk Analytics",
       "aliases": ["verisk"],
       "ats_domains": [
@@ -126,9 +122,9 @@
       ]
     },
     {
-      "name": "ICICI Bank",
+      "name": "ICICI Lombard",
       "aliases": ["icici"],
-      "ats_domains": ["icicicareers.com"]
+      "ats_domains": ["icicilombard.peoplestrong.com", "icicilombard.com/careers"]
     },
     {
       "name": "Axis Bank",
@@ -189,6 +185,30 @@
       "name": "Ericsson",
       "aliases": ["ericson"],
       "ats_domains": ["jobs.ericsson.com"]
+    },
+    {
+      "name": "Visa",
+      "ats_domains": [
+        "visa.wd5.myworkdayjobs.com",
+        "usa.visa.com/careers",
+        "visa.com/careers",
+        "smartrecruiters.com/Visa"
+      ]
+    },
+    {
+      "name": "Mastercard",
+      "aliases": ["master card"],
+      "ats_domains": ["mastercard.wd1.myworkdayjobs.com", "careers.mastercard.com"]
+    },
+    {
+      "name": "American Express",
+      "aliases": ["amex"],
+      "ats_domains": [
+        "egug.fa.us2.oraclecloud.com",
+        "careers.americanexpress.com",
+        "americanexpress.com/en-us/careers",
+        "aexp.eightfold.ai"
+      ]
     }
   ]
 }
