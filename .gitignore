@@ -3,7 +3,11 @@
 venv/
 env/
 
-# Python caches & packaging
+# Environment variables & secrets
+.env
+.env.*
+
+# Python caches, testing & packaging
 __pycache__/
 *.py[cod]
 *$py.class
@@ -11,10 +15,24 @@ __pycache__/
 dist/
 build/
 .eggs/
+wheels/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs & temporary files
+*.log
+*.bak
+*.tmp
+*.swp
+*.swo
 
 # OS & editor files
 .DS_Store
+Thumbs.db
 .vscode/
 .idea/
 
