@@ -1,6 +1,6 @@
 # 🤖 genai-jobs
 
-> **Lightweight Python CLI tool** that fetches the latest **Generative AI, Agentic AI, LLM, and RAG job openings** directly from the official **career portals of 37 top-tier tech companies** and prints matching jobs with their clickable URLs straight to your terminal.
+> **Lightweight Python CLI tool** that fetches the latest **Generative AI, Agentic AI, LLM, and RAG job openings** directly from the official **career portals of 38 top-tier tech companies** and prints matching jobs with their clickable URLs straight to your terminal.
 
 Built specifically for software and AI engineers (e.g., with ~2 years of experience) who want a fast, zero-bloat terminal tool instead of manually browsing dozens of career portals or noisy third-party job boards.
 
@@ -10,13 +10,13 @@ Built specifically for software and AI engineers (e.g., with ~2 years of experie
 
 | Capability | Details |
 |---|---|
-| **37 Target Companies** | Pre-configured for Google, Microsoft, Apple, Amazon, Disney, IBM Labs, Deloitte, Quantiphi, JP Morgan Chase, Goldman Sachs, Wells Fargo, DBS, Micron, Synopsys, Samsung, Berkadia, Invesco, Verisk Analytics, ADP, Coforge, CHUBB, ICICI Lombard, Axis Bank, Adobe, HPE, eBay, Flipkart, JODO, Honeywell, HCL, Cyient, Caterpillar, Ericsson, Visa, Mastercard, American Express, and BNY Mellon. |
+| **38 Target Companies** | Pre-configured for Google, Microsoft, Apple, Amazon, Disney, IBM Labs, EY, ZS Associates, Quantiphi, JP Morgan Chase, Goldman Sachs, Wells Fargo, DBS, Micron, Synopsys, Samsung, Berkadia, Invesco, Verisk Analytics, ADP, Coforge, CHUBB, ICICI Lombard, Axis Bank, Adobe, HPE, eBay, Flipkart, JODO, Honeywell, HCL, Cyient, Caterpillar, Ericsson, Visa, Mastercard, American Express, and BNY Mellon. |
 | **Strict India Location** | **Strictly searches and filters for jobs within India only**. Accepts any location within India (Bengaluru, Hyderabad, Pune, Mumbai, Gurugram, Noida, Chennai, Delhi NCR, Kolkata, Pan-India Remote), while automatically filtering out international/foreign roles (USA, UK, Singapore, Europe, etc.). |
 | **Strict Experience Filtering** | Profile-matched for **< 4 years** minimum required experience. For experience ranges (e.g., `2–4 yr`, `3–5 yr`), checks that the **minimum required years** is `< 4` (so `3–5 yr` is kept since `3 < 4`), while eliminating `≥ 4 yr` roles (`4+ yr`, `4–8 yr`, `5+ yr`, Senior, Lead, Manager, Architect, Principal, Staff, Engineer III, MTS 3+). |
 | **Weekly Timeframe** | Defaults to active jobs posted in the **last 7 days** (`default_days: 7`). |
 | **Fetch All Openings (No Capping)** | Defaults to fetching **all** matching job openings without artificial caps (`default_max_results: 0`). You can optionally pass `-m <N>` to cap results. |
 | **Focused Search Terms** | Strictly searches and matches only **Generative AI / GenAI, Agentic AI, LLM, and RAG** across all engines for fast, high-signal execution. |
-| **Career-Portal-Only Fetching** | Runs 3 concurrent career-portal engines: **Amazon JSON API**, **Direct ATS Portals Engine** (`-s ats` supporting 23 direct company career portals: Amazon, Google, Adobe, Goldman Sachs, Deloitte, JP Morgan Chase, Micron, Disney, Wells Fargo, Honeywell, CHUBB, Invesco, Quantiphi, Berkadia, Caterpillar, Ericsson, Visa, Mastercard, American Express, BNY Mellon, Synopsys, eBay, HPE), and **Parallel DuckDuckGo ATS Dorking** (`-s dork` restricted strictly to configured company career domains; in default `-s all` mode automatically focuses on the remaining 14 portals without direct APIs for faster execution). Third-party job boards are excluded. |
+| **Career-Portal-Only Fetching** | Runs 3 concurrent career-portal engines: **Amazon JSON API**, **Direct ATS Portals Engine** (`-s ats` supporting 24 direct company career portals: Amazon, Google, Adobe, Goldman Sachs, EY, ZS Associates, JP Morgan Chase, Micron, Disney, Wells Fargo, Honeywell, CHUBB, Invesco, Quantiphi, Berkadia, Caterpillar, Ericsson, Visa, Mastercard, American Express, BNY Mellon, Synopsys, eBay, HPE), and **Parallel DuckDuckGo ATS Dorking** (`-s dork` restricted strictly to configured company career domains; in default `-s all` mode automatically focuses on the remaining 14 portals without direct APIs for faster execution). Third-party job boards are excluded. |
 | **Anti-Bot & Stealth Security** | Rotates modern desktop browser User-Agents (Chrome 131, Safari 18, Firefox 133), Client Hints (`sec-ch-ua`), and `Sec-Fetch-*` directives with randomized jitter pacing. |
 | **Terminal-Only Output** | Renders a clean Rich summary table followed by full, untruncated, clickable **Job URLs** directly in the terminal—no generated files or UI bloat. |
 | **100% Loose Coupling** | All companies, aliases, career portal domains, search terms, and runtime settings are configured externally in `config/*.json`. |
@@ -48,7 +48,7 @@ pip install -e .
 ## 🖥️ How to Run the Application
 
 ### 1. Default Run (Recommended)
-Fetches all matching jobs across all 37 companies in India posted in the **last 7 days**, strictly filtered for **< 4 years experience**, and displays the table + clickable job URLs in your terminal:
+Fetches all matching jobs across all 38 companies in India posted in the **last 7 days**, strictly filtered for **< 4 years experience**, and displays the table + clickable job URLs in your terminal:
 ```bash
 genai-jobs
 ```
@@ -65,8 +65,8 @@ genai-jobs -c Google -c Microsoft -c Apple -c Amazon
 # Query Financial Services, Payments & Insurance
 genai-jobs -c "JP Morgan Chase" -c "Goldman Sachs" -c "Wells Fargo" -c "BNY Mellon" -c Visa -c Mastercard -c Amex -c "ICICI Lombard"
 
-# Query AI, Data & Product Companies
-genai-jobs -c Adobe -c Quantiphi -c Micron -c Flipkart -c JODO
+# Query AI, Data & Advisory Companies
+genai-jobs -c Adobe -c EY -c "ZS Associates" -c Quantiphi -c Flipkart -c JODO
 ```
 
 ---
@@ -118,7 +118,7 @@ genai-jobs -x all
 
 ---
 
-### 6. List All 37 Configured Companies
+### 6. List All 38 Configured Companies
 ```bash
 genai-jobs --list-companies
 ```
@@ -128,7 +128,7 @@ genai-jobs --list-companies
 ### 7. Choose Specific Career-Portal Engines
 By default, `genai-jobs` runs all career-portal engines concurrently (`all`). Restrict with `-s` or `--sources`:
 ```bash
-# Run Direct Official Career Portal APIs only (ultra-fast across 23 company portals)
+# Run Direct Official Career Portal APIs only (ultra-fast across 24 company portals)
 genai-jobs -s ats
 
 # Run DDG Career-Portal ATS Dorking only
@@ -162,7 +162,7 @@ All configuration lives in the `config/` directory:
 
 | File | What it Controls |
 |---|---|
-| [`config/companies.json`](config/companies.json) | The 37 target companies, optional CLI shorthand aliases, and their official ATS career domains. |
+| [`config/companies.json`](config/companies.json) | The 38 target companies, optional CLI shorthand aliases, and their official ATS career domains. |
 | [`config/skills.json`](config/skills.json) | Core search terms (`Generative AI`, `Agentic AI`, `LLM`, `RAG`) and skills matching/tagging rules. |
 | [`config/settings.json`](config/settings.json) | Minimal runtime defaults: `default_days` (7), `default_experience` ("<4"), `strict_experience` (true), `default_location` ("India"), `default_max_results` (0 = all), and `default_sources` ("all"). |
 
@@ -187,7 +187,7 @@ job-tool/
 ├── genai-jobs                  # Executable Bash wrapper invoking .venv/bin/genai-jobs
 ├── README.md                   # Documentation, usage guide & codebase reference
 ├── config/                     # External Configuration (Loose Coupling)
-│   ├── companies.json          # 37 target companies, optional shorthand aliases & ATS domains
+│   ├── companies.json          # 38 target companies, optional shorthand aliases & ATS domains
 │   ├── skills.json             # Core search terms & GenAI/Agentic/LLM/RAG matching rules
 │   └── settings.json           # Minimal CLI runtime defaults (days, exp, location, sources)
 └── genai_jobs/                 # Core Application Package
@@ -201,7 +201,7 @@ job-tool/
     ├── engines/                # Career-Portal Job Fetching Engines
     │   ├── __init__.py         # Re-exports Direct ATS, Dork & Amazon API fetchers
     │   ├── amazon_api.py       # Amazon Jobs public JSON API fetcher
-    │   ├── ats_engine.py       # 22 direct career portal APIs (Google, Workday, Oracle, GS, Deloitte, Synopsys, Phenom, Eightfold)
+    │   ├── ats_engine.py       # 23 direct career portal APIs (Google, Workday, Oracle, GS, EY, ZS Associates, Synopsys, Phenom, Eightfold)
     │   └── dork_engine.py      # Parallel DuckDuckGo site-restricted career-portal dorking engine
     └── utils/                  # Shared Domain Filtering & Anti-Bot Utilities
         ├── __init__.py         # Re-exports filter, location & experience helpers
@@ -213,7 +213,7 @@ job-tool/
 
 ## 📖 Codebase Guide: What Each File Contains
 
-> Every function, property, validator, and nested helper across `genai_jobs/` (81 functions total) includes a structured Python docstring specifying its exact behavior, inputs (`Args:`), and outputs (`Returns:` / `Raises:`).
+> Every function, property, validator, and nested helper across `genai_jobs/` (82 functions total) includes a structured Python docstring specifying its exact behavior, inputs (`Args:`), and outputs (`Returns:` / `Raises:`).
 
 ### Execution Flow at a Glance
 
@@ -223,7 +223,7 @@ genai_jobs/cli.py (or __main__.py)
    └── calls genai_jobs/pipeline.py :: run_pipeline()
          ├── runs active career-portal engines concurrently (ThreadPoolExecutor):
          │     ├── genai_jobs/engines/amazon_api.py     (Amazon JSON API)
-         │     ├── genai_jobs/engines/ats_engine.py     (22 direct career portal APIs/SSR)
+         │     ├── genai_jobs/engines/ats_engine.py     (23 direct career portal APIs/SSR)
          │     └── genai_jobs/engines/dork_engine.py    (DuckDuckGo site-restricted ATS dorking)
          ├── engines normalize hits into genai_jobs/models.py :: JobPosting
          │     └── using genai_jobs/utils/filters.py (company, GenAI, location, exp, skills)
@@ -249,7 +249,7 @@ genai_jobs/cli.py (or __main__.py)
 
 | File | Responsibility & Key Contents |
 |---|---|
-| [`config/companies.json`](config/companies.json) | Holds the `companies` array of 37 target organizations. Each entry specifies canonical `name`, optional CLI shorthand `aliases`, and official `ats_domains` (career portal hostnames/paths for ATS dorking and URL matching). |
+| [`config/companies.json`](config/companies.json) | Holds the `companies` array of 38 target organizations. Each entry specifies canonical `name`, optional CLI shorthand `aliases`, and official `ats_domains` (career portal hostnames/paths for ATS dorking and URL matching). |
 | [`config/skills.json`](config/skills.json) | Holds `search_terms` (`Generative AI`, `Agentic AI`, `LLM`, `RAG` — shared as the single source of truth across all engines) and `skills_detection` (keyword variants used for matching and tagging `Generative AI`, `Agentic AI`, `LLM`, and `RAG`). |
 | [`config/settings.json`](config/settings.json) | Holds lightweight CLI runtime defaults: `default_days` (`7`), `default_experience` (`"<4"`), `strict_experience` (`true`), `default_location` (`"India"`), `default_max_results` (`0`), and `default_sources` (`"all"`). |
 
@@ -275,7 +275,7 @@ genai_jobs/cli.py (or __main__.py)
 |---|---|
 | [`genai_jobs/engines/__init__.py`](genai_jobs/engines/__init__.py) | Package exports for `fetch_via_ats_apis`, `fetch_via_dork`, and `fetch_amazon_jobs`. |
 | [`genai_jobs/engines/amazon_api.py`](genai_jobs/engines/amazon_api.py) | **Amazon JSON API Engine** (`fetch_amazon_jobs()`, `get_amazon_search_terms()`). Queries `amazon.jobs/en/search.json` (`_get_amazon_page()` with Tenacity retries and stealth headers) across the configured `search_terms` (`Generative AI`, `Agentic AI`, `LLM`, `RAG`), handles offset pagination (`_MAX_OFFSET_PER_TERM`), URL normalization (`_build_url()`), cutoff dates (`_parse_date()`), location verification (`_location_matches()`), and converts hits into `JobPosting` objects (`_build_job()`). |
-| [`genai_jobs/engines/ats_engine.py`](genai_jobs/engines/ats_engine.py) | **Direct Career Portal API Engine** (`fetch_via_ats_apis()`, `get_supported_ats_companies()`, `_get_ats_search_terms()`, plus shared helpers `_strip_html()`, `_parse_relative_date()`, `_is_senior_title()`). Concurrently queries 22 official ATS endpoints/SSR pages directly using configured `search_terms`: <br>• **Google Careers** (`_fetch_google_careers()`): extracts `AF_initDataCallback` JSON payloads.<br>• **Workday CXS** (`_fetch_workday_company()`, `_WORKDAY_PORTALS`): Adobe, Micron, Berkadia, Disney, Invesco, Quantiphi, Wells Fargo, Caterpillar, Visa, Mastercard with concurrent `_hydrate()` detail fetching.<br>• **Oracle Cloud HCM** (`_fetch_oracle_company()`, `_ORACLE_PORTALS`): JP Morgan Chase, CHUBB, Honeywell, American Express, BNY Mellon REST APIs (with server-side India country filtering and `POSTING_DATES_DESC` pagination) + concurrent `_hydrate()` requisition detail fetching.<br>• **Goldman Sachs** (`_fetch_goldman_sachs()`): Higher GraphQL API (`GetRoles`).<br>• **Deloitte South Asia** (`_fetch_deloitte_portal()`): `southasiacareers.deloitte.com` search + concurrent `_hydrate()` detail scraping.<br>• **Synopsys** (`_fetch_synopsys_portal()`): TalentBrew endpoint on `careers.synopsys.com` + concurrent `_hydrate()` detail scraping.<br>• **Phenom People SSR** (`_fetch_phenom_company()`, `_PHENOM_PORTALS`): eBay and HPE `phApp.ddo` payloads.<br>• **Eightfold PCSX** (`_fetch_eightfold_company()`, `_EIGHTFOLD_PORTALS`): Ericsson `/api/pcsx/search` + concurrent `_hydrate()` `position_details` fetching. |
+| [`genai_jobs/engines/ats_engine.py`](genai_jobs/engines/ats_engine.py) | **Direct Career Portal API Engine** (`fetch_via_ats_apis()`, `get_supported_ats_companies()`, `_get_ats_search_terms()`, plus shared helpers `_strip_html()`, `_parse_relative_date()`, `_is_senior_title()`). Concurrently queries 23 official ATS endpoints/SSR pages directly using configured `search_terms`: <br>• **Google Careers** (`_fetch_google_careers()`): extracts `AF_initDataCallback` JSON payloads.<br>• **Workday CXS** (`_fetch_workday_company()`, `_WORKDAY_PORTALS`): Adobe, Micron, Berkadia, Disney, Invesco, Quantiphi, Wells Fargo, Caterpillar, Visa, Mastercard with concurrent `_hydrate()` detail fetching.<br>• **Oracle Cloud HCM** (`_fetch_oracle_company()`, `_ORACLE_PORTALS`): JP Morgan Chase, CHUBB, Honeywell, American Express, BNY Mellon REST APIs (with server-side India country filtering and `POSTING_DATES_DESC` pagination) + concurrent `_hydrate()` requisition detail fetching.<br>• **Goldman Sachs** (`_fetch_goldman_sachs()`): Higher GraphQL API (`GetRoles`).<br>• **EY** (`_fetch_ey_portal()`): `careers.ey.com` SuccessFactors newest-first search + concurrent `_hydrate()` detail scraping.<br>• **ZS Associates** (`_fetch_zs_portal()`): `jobs.zs.com/api/jobs` iCIMS Jibe JSON API with newest-first pagination.<br>• **Synopsys** (`_fetch_synopsys_portal()`): TalentBrew endpoint on `careers.synopsys.com` + concurrent `_hydrate()` detail scraping.<br>• **Phenom People SSR** (`_fetch_phenom_company()`, `_PHENOM_PORTALS`): eBay and HPE `phApp.ddo` payloads.<br>• **Eightfold PCSX** (`_fetch_eightfold_company()`, `_EIGHTFOLD_PORTALS`): Ericsson `/api/pcsx/search` + concurrent `_hydrate()` `position_details` fetching. |
 | [`genai_jobs/engines/dork_engine.py`](genai_jobs/engines/dork_engine.py) | **DuckDuckGo Career-Portal ATS Dorking Engine** (`fetch_via_dork()`, `_query_one()`). Builds `site:`-restricted queries exclusively from configured `ats_domains` + dynamic `search_terms` (`_build_genai_ddg_clause()`) + location clauses (`_build_dork_query()`), skips companies without configured career domains, executes searches via `ddgs` (`_ddg_search()`) in parallel with rate-limit retry and circuit breaking (`rl_state`), filters out career landing/blog pages, verifies exact domain ownership (`company_from_url()`), enforces India location & GenAI matching, and parses snippets into `JobPosting` objects (`_parse_ddg_result()`). |
 
 ---

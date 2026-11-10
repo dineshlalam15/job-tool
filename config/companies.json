@@ -25,12 +25,22 @@
       "ats_domains": ["ibm.com/careers", "ibm.biz"]
     },
     {
-      "name": "Deloitte",
+      "name": "EY",
+      "aliases": ["ernst & young", "ernst and young", "ey india", "ey gds"],
       "ats_domains": [
-        "southasiacareers.deloitte.com",
-        "jobsindia.deloitte.com",
-        "jobs.deloitte.com",
-        "deloitte.com/careers"
+        "careers.ey.com",
+        "ey.com/en_in/careers",
+        "ey.com/en_gl/careers"
+      ]
+    },
+    {
+      "name": "ZS Associates",
+      "aliases": ["zs", "zs associates india"],
+      "ats_domains": [
+        "jobs.zs.com",
+        "careers-zs.icims.com",
+        "incareers-zs.icims.com",
+        "zs.com/careers"
       ]
     },
     {

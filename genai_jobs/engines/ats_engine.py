@@ -4,7 +4,7 @@ genai_jobs/engines/ats_engine.py
 Direct Career Portal API Engine — queries official ATS JSON/GraphQL endpoints
 and structured SSR career pages directly without relying solely on aggregators.
 
-Supported Direct Career Portal Adapters (22 portals + Amazon API = 23/37)
+Supported Direct Career Portal Adapters (23 portals + Amazon API = 24/38)
 ─────────────────────────────────────────────────────────────────────────
 * Google Careers       (`www.google.com/about/careers/applications/jobs/results/`)
 * Workday CXS API      (`*.myworkdayjobs.com` / `myworkdaysite.com`)
@@ -14,7 +14,8 @@ Supported Direct Career Portal Adapters (22 portals + Amazon API = 23/37)
                        JP Morgan Chase, CHUBB, Honeywell, American Express,
                        BNY Mellon
 * Goldman Sachs API    (`api-higher.gs.com/gateway/api/v1/graphql`)
-* Deloitte South Asia  (`southasiacareers.deloitte.com`)
+* EY Career Portal     (`careers.ey.com`)
+* ZS Associates API    (`jobs.zs.com/api/jobs`)
 * Synopsys Career Site (`careers.synopsys.com`)
 * Phenom People SSR    (`phApp.ddo`): eBay, HPE
 * Eightfold PCSX API   (`*/api/pcsx/search`): Ericsson
@@ -31,6 +32,12 @@ from typing import Optional
 from urllib.parse import quote_plus
 
 import httpx
+
+try:
+    import certifi
+    _CA_BUNDLE: str | bool = certifi.where()
+except ImportError:
+    _CA_BUNDLE = True
 
 from genai_jobs.config import get_search_terms
 from genai_jobs.constants import DEFAULT_DAYS, DEFAULT_MAX_RESULTS
@@ -114,7 +121,7 @@ def _parse_relative_date(raw: str) -> Optional[date]:
             return datetime.strptime(m_iso.group(1), "%Y-%m-%d").date()
         except ValueError:
             pass
-    for fmt in ("%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%d/%m/%Y"):
+    for fmt in ("%b %d, %Y", "%B %d, %Y", "%d %b %Y", "%d %B %Y", "%m/%d/%Y", "%d/%m/%Y"):
         try:
             return datetime.strptime(cleaned, fmt).date()
         except ValueError:
@@ -893,17 +900,18 @@ def _fetch_goldman_sachs(
     return jobs
 
 
-# ─── Deloitte South Asia Career Portal ────────────────────────────────────────
+# ─── EY Career Portal (SAP SuccessFactors) ────────────────────────────────────
 
-def _fetch_deloitte_portal(
+def _fetch_ey_portal(
     location: str,
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
     """
-    Search Deloitte South Asia's career portal across configured search terms,
-    parse HTML result rows, pre-filter by date, location, and title seniority,
-    and concurrently fetch individual job detail pages.
+    Search EY's official SuccessFactors career portal across configured search
+    terms, parse newest-first HTML result rows, verify target India/city locations
+    and seniority tiers (treating EY's junior ``Staff`` band via JD experience),
+    and concurrently hydrate individual job pages for posting dates and Gen-AI match.
 
     Args:
         location (str): Target search location string.
@@ -911,12 +919,23 @@ def _fetch_deloitte_portal(
         max_results (int): Maximum jobs to return (<= 0 means unlimited).
 
     Returns:
-        list[JobPosting]: Matching Deloitte ``JobPosting`` records.
+        list[JobPosting]: Matching EY ``JobPosting`` records.
     """
-    base_url = "https://southasiacareers.deloitte.com"
+    base_url = "https://careers.ey.com"
     headers = get_stealth_headers("text/html,application/xhtml+xml")
-    is_india_target = not location or location.strip().lower() in ("india", "ind")
-    loc_q = "India" if is_india_target else location
+
+    loc_clean = (location or "").strip()
+    loc_lower = loc_clean.lower()
+    is_india_target = not loc_clean or loc_lower in ("india", "ind")
+    is_india_city = (not is_india_target) and is_india_location(loc_clean)
+    target_city_norm = extract_india_location(loc_clean) if is_india_city else None
+
+    if is_india_target or is_india_city:
+        loc_q = "India"
+    elif loc_lower in ("all", "global", "anywhere", "any"):
+        loc_q = ""
+    else:
+        loc_q = loc_clean
 
     seen_hrefs: set[str] = set()
     candidates: list[dict] = []
@@ -928,79 +947,107 @@ def _fetch_deloitte_portal(
         timeout=_HTTP_TIMEOUT,
         limits=_HTTP_LIMITS,
         follow_redirects=True,
+        verify=_CA_BUNDLE,
     ) as client:
         for q in _get_ats_search_terms():
-            url = f"{base_url}/search/?q={quote_plus(q)}&locationsearch={quote_plus(loc_q)}"
-            try:
-                r = client.get(url)
-                if r.status_code != 200:
-                    continue
-            except Exception as exc:
-                logger.debug("Deloitte portal failed for %r: %s", q, exc)
-                continue
-
-            rows = re.findall(r'<tr class="data-row">(.*?)</tr>', r.text, re.S)
-            for row_html in rows:
-                m_link = re.search(
-                    r'<a[^>]+href="([^"]+)"[^>]*class="jobTitle-link"[^>]*>([^<]+)</a>',
-                    row_html,
-                ) or re.search(
-                    r'<a[^>]+class="jobTitle-link"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>',
-                    row_html,
+            for startrow in (0, 25):
+                loc_part = f"&locationsearch={quote_plus(loc_q)}" if loc_q else ""
+                url = (
+                    f"{base_url}/ey/search/?q={quote_plus(q)}{loc_part}"
+                    f"&sortColumn=referencedate&sortDirection=desc&startrow={startrow}"
                 )
-                if not m_link:
-                    continue
-                href = m_link.group(1).strip()
-                title = html.unescape(m_link.group(2)).strip()
-                if not href or not title or href in seen_hrefs:
-                    continue
-                seen_hrefs.add(href)
+                try:
+                    r = client.get(url)
+                    if r.status_code != 200:
+                        break
+                except Exception as exc:
+                    logger.debug("EY portal failed for %r: %s", q, exc)
+                    break
 
-                m_date = re.search(r'class="jobDate"[^>]*>([^<]+)', row_html)
-                posted_on = _parse_relative_date(m_date.group(1) if m_date else "")
-                if cutoff_date and posted_on and posted_on < cutoff_date:
-                    continue
+                rows = re.findall(r'<tr class="data-row">(.*?)</tr>', r.text, re.S)
+                if not rows:
+                    break
 
-                m_loc = re.search(r'<span class="jobLocation">\s*([^<]+)', row_html)
-                raw_loc = (m_loc.group(1) if m_loc else "").strip()
-                if is_india_target:
-                    if not is_india_location(raw_loc, title):
+                for row_html in rows:
+                    m_link = re.search(
+                        r'<a[^>]+href="([^"]+)"[^>]*class="jobTitle-link"[^>]*>([^<]+)</a>',
+                        row_html,
+                    ) or re.search(
+                        r'<a[^>]+class="jobTitle-link"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>',
+                        row_html,
+                    )
+                    if not m_link:
                         continue
-                    extracted = extract_india_location(f"{raw_loc} {title}")
-                    if extracted:
-                        raw_loc = extracted
+                    href = html.unescape(m_link.group(1)).strip()
+                    title = html.unescape(m_link.group(2)).strip()
+                    if not href or not title or href in seen_hrefs:
+                        continue
+                    seen_hrefs.add(href)
 
-                if _is_senior_title(title):
-                    continue
+                    m_loc = re.search(r'<span class="jobLocation">\s*([^<]+)', row_html)
+                    raw_loc = re.sub(r"\s+", " ", m_loc.group(1)).strip() if m_loc else ""
+                    display_loc = raw_loc
+                    if is_india_city:
+                        if not (
+                            (target_city_norm and extract_india_location(raw_loc) == target_city_norm)
+                            or (loc_lower in raw_loc.lower())
+                        ):
+                            continue
+                        display_loc = extract_india_location(raw_loc) or raw_loc
+                    elif is_india_target:
+                        if not is_india_location(raw_loc, title):
+                            continue
+                        extracted = extract_india_location(f"{raw_loc} {title}")
+                        if extracted:
+                            display_loc = extracted
 
-                candidates.append(
-                    {
-                        "title": title,
-                        "url": href if href.startswith("http") else f"{base_url}{href}",
-                        "location": raw_loc or "India",
-                        "posted_on": posted_on,
-                    }
-                )
+                    # EY uses "Staff" for its junior band; split underscores/camelCase for senior ranks.
+                    ey_seniority_title = re.sub(r"([a-z])([A-Z])", r"\1 \2", title.replace("_", " "))
+                    ey_seniority_title = re.sub(r"\bstaff\b", " ", ey_seniority_title, flags=re.I)
+                    ey_seniority_title = re.sub(r"\s+", " ", ey_seniority_title).strip()
+                    if _is_senior_title(ey_seniority_title):
+                        continue
+
+                    candidates.append(
+                        {
+                            "title": title,
+                            "ey_title": ey_seniority_title,
+                            "url": href if href.startswith("http") else f"{base_url}{href}",
+                            "location": display_loc or "India",
+                        }
+                    )
+
+                if len(rows) < 25:
+                    break
 
         if not candidates:
             return []
 
         def _hydrate(cand: dict) -> Optional[JobPosting]:
             """
-            Fetch a Deloitte job detail page, extract its description HTML, verify
-            Gen-AI keyword relevance, and return a normalized ``JobPosting``.
+            Fetch an EY job detail page, extract its posting date and full
+            description HTML, enforce cutoff/Gen-AI checks, and return a ``JobPosting``.
 
             Args:
-                cand (dict): Pre-filtered candidate dict with ``title``, ``url``,
-                    ``location``, and ``posted_on``.
+                cand (dict): Pre-filtered candidate dict with ``title``, ``ey_title``,
+                    ``url``, and ``location``.
 
             Returns:
                 Optional[JobPosting]: Hydrated ``JobPosting`` if valid, else ``None``.
             """
             full_text = ""
+            posted_on: Optional[date] = None
             try:
                 dr = client.get(cand["url"])
                 if dr.status_code == 200:
+                    m_date = re.search(
+                        r'data-careersite-propertyid="date"[^>]*>\s*([^<]+)',
+                        dr.text,
+                        re.I,
+                    ) or re.search(r'class="jobDate"[^>]*>([^<]+)', dr.text)
+                    posted_on = _parse_relative_date(m_date.group(1) if m_date else "")
+                    if cutoff_date and posted_on and posted_on < cutoff_date:
+                        return None
                     m_desc = re.search(
                         r'class="jobdescription"[^>]*>(.*?)</span>\s*</div>',
                         dr.text,
@@ -1008,32 +1055,182 @@ def _fetch_deloitte_portal(
                     )
                     full_text = _strip_html(m_desc.group(1) if m_desc else dr.text[:15000])
             except Exception as exc:
-                logger.debug("Deloitte detail failed for %s: %s", cand["url"], exc)
+                logger.debug("EY detail failed for %s: %s", cand["url"], exc)
 
             if not matches_genai(cand["title"], full_text):
                 return None
 
-            exp_min, exp_max = parse_experience(full_text or cand["title"], title=cand["title"])
+            exp_min, exp_max = parse_experience(full_text or cand["title"], title=cand["ey_title"])
             skills = detect_skills(cand["title"], full_text)
             return JobPosting(
-                company="Deloitte",
+                company="EY",
                 title=cand["title"],
                 location=cand["location"],
-                date_posted=cand["posted_on"],
+                date_posted=posted_on,
                 url=cand["url"],
-                source="ats/deloitte",
+                source="ats/ey",
                 description_snippet=truncate(full_text or cand["title"]),
                 exp_min=exp_min,
                 exp_max=exp_max,
                 skills=skills,
             )
 
-        with ThreadPoolExecutor(max_workers=min(4, len(candidates))) as pool:
+        with ThreadPoolExecutor(max_workers=min(6, len(candidates))) as pool:
             for job in pool.map(_hydrate, candidates):
                 if job:
                     jobs.append(job)
                     if not unlimited and len(jobs) >= max_results:
                         break
+
+    return jobs
+
+
+# ─── ZS Associates Career Portal (iCIMS Jibe JSON API) ─────────────────────────
+
+def _fetch_zs_portal(
+    location: str,
+    cutoff_date: Optional[date],
+    max_results: int,
+) -> list[JobPosting]:
+    """
+    Query ZS Associates' iCIMS Jibe JSON API across configured Gen-AI search
+    terms sorted newest-first, enforcing recency cutoffs, India/city location
+    matching, seniority filtering, and experience extraction from full JSON details.
+
+    Args:
+        location (str): Target search location string.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching ZS Associates ``JobPosting`` records.
+    """
+    base_url = "https://jobs.zs.com"
+    api_url = f"{base_url}/api/jobs"
+    headers = get_stealth_headers("application/json", referer=f"{base_url}/jobs")
+
+    loc_clean = (location or "").strip()
+    loc_lower = loc_clean.lower()
+    is_india_target = not loc_clean or loc_lower in ("india", "ind")
+    is_india_city = (not is_india_target) and is_india_location(loc_clean)
+    target_city_norm = extract_india_location(loc_clean) if is_india_city else None
+
+    if loc_lower in ("all", "global", "anywhere", "any"):
+        api_loc = ""
+    elif is_india_target:
+        api_loc = "India"
+    else:
+        api_loc = loc_clean
+
+    seen_slugs: set[str] = set()
+    jobs: list[JobPosting] = []
+    unlimited = not max_results or max_results <= 0
+
+    with httpx.Client(
+        headers=headers,
+        timeout=_HTTP_TIMEOUT,
+        limits=_HTTP_LIMITS,
+        follow_redirects=True,
+    ) as client:
+        for kw in _get_ats_search_terms():
+            if not unlimited and len(jobs) >= max_results:
+                break
+            for page in (1, 2):
+                params: dict[str, str | int] = {
+                    "keywords": kw,
+                    "sortBy": "posted_date",
+                    "descending": "true",
+                    "limit": 25,
+                    "page": page,
+                }
+                if api_loc:
+                    params["location"] = api_loc
+
+                try:
+                    resp = client.get(api_url, params=params)
+                    if resp.status_code != 200:
+                        break
+                    data = resp.json()
+                    raw_jobs = data.get("jobs") or []
+                    total_count = data.get("totalCount") or 0
+                except Exception as exc:
+                    logger.debug("ZS Associates API failed for %r: %s", kw, exc)
+                    break
+
+                if not raw_jobs:
+                    break
+
+                saw_in_window = False
+                reached_cutoff = False
+                for entry in raw_jobs:
+                    jd = entry.get("data") or {}
+                    posted_on = _parse_relative_date(str(jd.get("posted_date") or jd.get("create_date") or ""))
+                    if cutoff_date and posted_on and posted_on < cutoff_date:
+                        reached_cutoff = True
+                        continue
+                    saw_in_window = True
+
+                    slug = str(jd.get("slug") or jd.get("req_id") or "").strip()
+                    title = (jd.get("title") or "").strip()
+                    if not slug or not title or slug in seen_slugs:
+                        continue
+                    seen_slugs.add(slug)
+
+                    raw_loc = (jd.get("full_location") or jd.get("short_location") or jd.get("city") or "").strip()
+                    loc_entries = [p.strip() for p in re.split(r"[;|]", raw_loc) if p.strip()]
+                    display_loc = raw_loc
+
+                    if is_india_city:
+                        matched_city = next(
+                            (
+                                part
+                                for part in loc_entries
+                                if (target_city_norm and extract_india_location(part) == target_city_norm)
+                                or (loc_lower in part.lower())
+                            ),
+                            None,
+                        )
+                        if not matched_city:
+                            continue
+                        display_loc = extract_india_location(matched_city) or matched_city
+                    elif is_india_target:
+                        if not is_india_location(raw_loc, title):
+                            continue
+                        display_loc = extract_india_location(raw_loc) or raw_loc or "India"
+
+                    if _is_senior_title(title):
+                        continue
+
+                    full_text = _strip_html(
+                        " ".join(
+                            str(jd.get(k) or "")
+                            for k in ("description", "qualifications", "responsibilities")
+                        )
+                    )
+                    if not matches_genai(title, full_text):
+                        continue
+
+                    exp_min, exp_max = parse_experience(full_text or title, title=title)
+                    skills = detect_skills(title, full_text)
+                    jobs.append(
+                        JobPosting(
+                            company="ZS Associates",
+                            title=title,
+                            location=display_loc or "India",
+                            date_posted=posted_on,
+                            url=f"{base_url}/jobs/{slug}",
+                            source="ats/icims",
+                            description_snippet=truncate(full_text or title),
+                            exp_min=exp_min,
+                            exp_max=exp_max,
+                            skills=skills,
+                        )
+                    )
+                    if not unlimited and len(jobs) >= max_results:
+                        return jobs
+
+                if len(raw_jobs) < 25 or (page * 25) >= total_count or not saw_in_window or reached_cutoff:
+                    break
 
     return jobs
 
@@ -1503,9 +1700,9 @@ def get_supported_ats_companies() -> set[str]:
 
     Returns:
         set[str]: Supported canonical company names (Google, Goldman Sachs,
-            Deloitte, Synopsys, plus all Workday, Oracle, Phenom, and Eightfold portals).
+            EY, ZS Associates, Synopsys, plus all Workday, Oracle, Phenom, and Eightfold portals).
     """
-    supported = {"Google", "Goldman Sachs", "Deloitte", "Synopsys"}
+    supported = {"Google", "Goldman Sachs", "EY", "ZS Associates", "Synopsys"}
     supported.update(_WORKDAY_PORTALS.keys())
     supported.update(_ORACLE_PORTALS.keys())
     supported.update(_PHENOM_PORTALS.keys())
@@ -1549,8 +1746,10 @@ def fetch_via_ats_apis(
         tasks.append(("Google", lambda: _fetch_google_careers(location, cutoff_date, max_results)))
     if "Goldman Sachs" in target_set:
         tasks.append(("Goldman Sachs", lambda: _fetch_goldman_sachs(location, cutoff_date, max_results)))
-    if "Deloitte" in target_set:
-        tasks.append(("Deloitte", lambda: _fetch_deloitte_portal(location, cutoff_date, max_results)))
+    if "EY" in target_set:
+        tasks.append(("EY", lambda: _fetch_ey_portal(location, cutoff_date, max_results)))
+    if "ZS Associates" in target_set:
+        tasks.append(("ZS Associates", lambda: _fetch_zs_portal(location, cutoff_date, max_results)))
     if "Synopsys" in target_set:
         tasks.append(("Synopsys", lambda: _fetch_synopsys_portal(location, cutoff_date, max_results)))
     for co, cfg in _WORKDAY_PORTALS.items():
