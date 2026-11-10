@@ -4,15 +4,15 @@ genai_jobs/engines/ats_engine.py
 Direct Career Portal API Engine — queries official ATS JSON/GraphQL endpoints
 and structured SSR career pages directly without relying solely on aggregators.
 
-Supported Direct Career Portal Adapters (22 portals + Amazon API = 23/38)
+Supported Direct Career Portal Adapters (22 portals + Amazon API = 23/37)
 ─────────────────────────────────────────────────────────────────────────
 * Google Careers       (`www.google.com/about/careers/applications/jobs/results/`)
 * Workday CXS API      (`*.myworkdayjobs.com` / `myworkdaysite.com`)
-                       Salesforce, Adobe, Micron, Berkadia, Disney,
-                       Invesco, Quantiphi, Wells Fargo, Caterpillar,
-                       Visa, Mastercard
+                       Adobe, Micron, Berkadia, Disney, Invesco, Quantiphi,
+                       Wells Fargo, Caterpillar, Visa, Mastercard
 * Oracle Cloud HCM API (`*.fa.oraclecloud.com/hcmRestApi/...`)
-                       JP Morgan Chase, CHUBB, Honeywell, American Express
+                       JP Morgan Chase, CHUBB, Honeywell, American Express,
+                       BNY Mellon
 * Goldman Sachs API    (`api-higher.gs.com/gateway/api/v1/graphql`)
 * Deloitte South Asia  (`southasiacareers.deloitte.com`)
 * Synopsys Career Site (`careers.synopsys.com`)
@@ -273,11 +273,6 @@ def _fetch_google_careers(
 # ─── Workday CXS JSON API Fetcher ─────────────────────────────────────────────
 
 _WORKDAY_PORTALS: dict[str, dict[str, str]] = {
-    "Salesforce": {
-        "host": "salesforce.wd12.myworkdayjobs.com",
-        "tenant": "salesforce",
-        "site": "External_Career_Site",
-    },
     "Adobe": {
         "host": "adobe.wd5.myworkdayjobs.com",
         "tenant": "adobe",
@@ -508,7 +503,7 @@ def _fetch_workday_company(
     return jobs
 
 
-# ─── Oracle Cloud HCM JSON API (JPMC, CHUBB, Honeywell, American Express) ────
+# ─── Oracle Cloud HCM JSON API (JPMC, CHUBB, Honeywell, Amex, BNY Mellon) ────
 
 _ORACLE_PORTALS: dict[str, dict[str, str]] = {
     "JP Morgan Chase": {
@@ -527,6 +522,10 @@ _ORACLE_PORTALS: dict[str, dict[str, str]] = {
         "host": "egug.fa.us2.oraclecloud.com",
         "site": "CX_1",
     },
+    "BNY Mellon": {
+        "host": "eofe.fa.us2.oraclecloud.com",
+        "site": "CX_1",
+    },
 }
 
 
@@ -539,8 +538,10 @@ def _fetch_oracle_company(
 ) -> list[JobPosting]:
     """
     Fetch Gen-AI job requisitions from an Oracle Cloud HCM Recruiting API
-    using configured search keywords, pre-filter candidate metadata, and
-    concurrently hydrate requisition details.
+    sorted newest-first with server-side country filtering (using ``India`` for
+    India and Indian-city targets, then verifying exact primary/secondary city
+    locations), pre-filter candidate metadata, and concurrently hydrate
+    requisition details.
 
     Args:
         company (str): Canonical company name.
@@ -556,7 +557,19 @@ def _fetch_oracle_company(
     site = cfg["site"]
     base_api = f"https://{host}/hcmRestApi/resources/latest"
     headers = get_stealth_headers("application/json")
-    is_india_target = not location or location.strip().lower() in ("india", "ind")
+
+    loc_clean = (location or "").strip()
+    loc_lower = loc_clean.lower()
+    is_india_target = not loc_clean or loc_lower in ("india", "ind")
+    is_india_city = (not is_india_target) and is_india_location(loc_clean)
+    target_city_norm = extract_india_location(loc_clean) if is_india_city else None
+
+    if is_india_target or is_india_city:
+        api_loc_clause = ",location=India"
+    elif loc_lower in ("all", "global", "anywhere", "any"):
+        api_loc_clause = ""
+    else:
+        api_loc_clause = f",location={quote_plus(loc_clean)}"
 
     seen_ids: set[str] = set()
     candidates: list[dict] = []
@@ -571,48 +584,92 @@ def _fetch_oracle_company(
         follow_redirects=True,
     ) as client:
         for kw in keywords:
-            list_url = (
-                f"{base_api}/recruitingCEJobRequisitions"
-                f"?onlyData=true&expand=requisitionList.secondaryLocations"
-                f"&finder=findReqs;siteNumber={site},keyword={quote_plus(kw)},limit=25"
-            )
-            try:
-                r = client.get(list_url)
-                if r.status_code != 200:
-                    continue
-                items = r.json().get("items", [])
-                reqs = items[0].get("requisitionList", []) if items else []
-            except Exception as exc:
-                logger.debug("Oracle %s list failed for %r: %s", company, kw, exc)
-                continue
-
-            for req in reqs:
-                req_id = str(req.get("Id") or "").strip()
-                title = (req.get("Title") or "").strip()
-                if not req_id or not title or req_id in seen_ids:
-                    continue
-                seen_ids.add(req_id)
-
-                primary_loc = (req.get("PrimaryLocation") or "").strip()
-                if is_india_target and not is_india_location(primary_loc, title):
-                    continue
-
-                posted_on = _parse_relative_date(req.get("PostedDate") or "")
-                if cutoff_date and posted_on and posted_on < cutoff_date:
-                    continue
-
-                if _is_senior_title(title):
-                    continue
-
-                candidates.append(
-                    {
-                        "id": req_id,
-                        "title": title,
-                        "location": extract_india_location(primary_loc) or primary_loc or "India",
-                        "posted_on": posted_on,
-                        "short_desc": req.get("ShortDescriptionStr") or "",
-                    }
+            for offset in (0, 25, 50):
+                list_url = (
+                    f"{base_api}/recruitingCEJobRequisitions"
+                    f"?onlyData=true&expand=requisitionList.secondaryLocations"
+                    f"&finder=findReqs;siteNumber={site},keyword={quote_plus(kw)}"
+                    f"{api_loc_clause},sortBy=POSTING_DATES_DESC,limit=25,offset={offset}"
                 )
+                try:
+                    r = client.get(list_url)
+                    if r.status_code != 200:
+                        break
+                    items = r.json().get("items", [])
+                    reqs = items[0].get("requisitionList", []) if items else []
+                    total_jobs = (items[0].get("TotalJobsCount") or 0) if items else 0
+                except Exception as exc:
+                    logger.debug("Oracle %s list failed for %r: %s", company, kw, exc)
+                    break
+
+                if not reqs:
+                    break
+
+                saw_in_window = False
+                reached_cutoff = False
+                for req in reqs:
+                    posted_on = _parse_relative_date(req.get("PostedDate") or "")
+                    if cutoff_date and posted_on and posted_on < cutoff_date:
+                        reached_cutoff = True
+                        continue
+                    saw_in_window = True
+
+                    req_id = str(req.get("Id") or "").strip()
+                    title = (req.get("Title") or "").strip()
+                    if not req_id or not title or req_id in seen_ids:
+                        continue
+                    seen_ids.add(req_id)
+
+                    primary_loc = (req.get("PrimaryLocation") or "").strip()
+                    sec_locs = [
+                        str(sec.get("Name") or sec.get("LocationName") or "").strip()
+                        for sec in (req.get("secondaryLocations") or [])
+                        if isinstance(sec, dict)
+                    ]
+                    sec_locs = [s for s in sec_locs if s]
+                    all_locs = [loc for loc in [primary_loc, *sec_locs] if loc]
+
+                    display_loc = primary_loc or (sec_locs[0] if sec_locs else "")
+                    if is_india_city:
+                        matched_city = next(
+                            (
+                                entry
+                                for entry in all_locs
+                                if (target_city_norm and extract_india_location(entry) == target_city_norm)
+                                or (loc_lower in entry.lower())
+                            ),
+                            None,
+                        )
+                        if not matched_city:
+                            continue
+                        display_loc = extract_india_location(matched_city) or matched_city
+                    elif is_india_target:
+                        matched_india = next(
+                            (entry for entry in all_locs if is_india_location(entry, title)),
+                            None,
+                        )
+                        if not matched_india:
+                            if (req.get("PrimaryLocationCountry") or "").strip().upper() == "IN" and not primary_loc:
+                                matched_india = "India"
+                            else:
+                                continue
+                        display_loc = extract_india_location(matched_india) or matched_india
+
+                    if _is_senior_title(title):
+                        continue
+
+                    candidates.append(
+                        {
+                            "id": req_id,
+                            "title": title,
+                            "location": display_loc or "India",
+                            "posted_on": posted_on,
+                            "short_desc": req.get("ShortDescriptionStr") or "",
+                        }
+                    )
+
+                if (offset + len(reqs)) >= total_jobs or not saw_in_window or reached_cutoff:
+                    break
 
         if not candidates:
             return []

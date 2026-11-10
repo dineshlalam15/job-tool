@@ -5,7 +5,7 @@ Typer-based CLI entry point for `genai-jobs`.
 
 Usage examples
 ──────────────
-  genai-jobs                                     # all 38 companies, India, 7 days, <4 yrs
+  genai-jobs                                     # all 37 companies, India, 7 days, <4 yrs
   genai-jobs -c Amazon -c IBM -l Hyderabad       # two companies, one city
   genai-jobs -d 7 -m 20 -s dork                 # dork only, 7 days, 20 results
   genai-jobs --list-companies                    # print all configured companies
@@ -37,8 +37,8 @@ from genai_jobs.utils.filters import validate_company_names
 app = typer.Typer(
     name="genai-jobs",
     help=(
-        "Fetch active Generative AI job postings from 38 target companies "
-        "(Google, Microsoft, Apple, Amazon, Salesforce, Visa, Mastercard, Amex, …) "
+        "Fetch active Generative AI job postings from 37 target companies "
+        "(Google, Microsoft, Apple, Amazon, Visa, Mastercard, Amex, BNY Mellon, …) "
         "strictly from their official career portals (direct ATS APIs, Amazon API, and ATS dorking)."
     ),
     add_completion=False,
@@ -85,7 +85,7 @@ def main(
             help=(
                 "Filter by company name (repeatable). "
                 "Accepts full names or aliases e.g. 'Google', 'Microsoft', 'Visa', 'Mastercard', 'Amex'. "
-                "Default: all 38 companies."
+                "Default: all 37 companies."
             ),
         ),
     ] = None,
@@ -180,7 +180,7 @@ def main(
         bool,
         typer.Option(
             "--list-companies",
-            help="Print the 38 target companies and exit.",
+            help="Print the 37 target companies and exit.",
             is_flag=True,
         ),
     ] = False,
@@ -195,9 +195,9 @@ def main(
     ] = False,
 ) -> None:
     """
-    Fetch active [bold cyan]Generative AI, Agentic AI, LLM & RAG[/bold cyan] job postings from 38 target companies.
+    Fetch active [bold cyan]Generative AI, Agentic AI, LLM & RAG[/bold cyan] job postings from 37 target companies.
 
-    By default queries [bold]all 38 companies[/bold] with [bold]all career-portal engines[/bold]
+    By default queries [bold]all 37 companies[/bold] with [bold]all career-portal engines[/bold]
     in [bold]India[/bold] for jobs posted in the [bold]last 7 days[/bold], strictly filtered for
     < 4 years experience, and prints matching jobs with their URLs directly in the terminal.
 

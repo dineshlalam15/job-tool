@@ -20,10 +20,6 @@
       "ats_domains": ["amazon.jobs"]
     },
     {
-      "name": "Salesforce",
-      "ats_domains": ["salesforce.wd12.myworkdayjobs.com", "careers.salesforce.com"]
-    },
-    {
       "name": "IBM Labs",
       "aliases": ["ibm"],
       "ats_domains": ["ibm.com/careers", "ibm.biz"]
@@ -87,10 +83,6 @@
     {
       "name": "Berkadia",
       "ats_domains": ["berkadia.wd1.myworkdayjobs.com", "berkadia.com/careers"]
-    },
-    {
-      "name": "Barclays",
-      "ats_domains": ["search.jobs.barclays", "barclays.taleo.net"]
     },
     {
       "name": "Invesco",
@@ -208,6 +200,15 @@
         "careers.americanexpress.com",
         "americanexpress.com/en-us/careers",
         "aexp.eightfold.ai"
+      ]
+    },
+    {
+      "name": "BNY Mellon",
+      "aliases": ["bny", "bank of new york mellon"],
+      "ats_domains": [
+        "eofe.fa.us2.oraclecloud.com",
+        "bny.com/careers",
+        "jobs.bnymellon.com"
       ]
     }
   ]
