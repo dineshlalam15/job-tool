@@ -179,6 +179,16 @@
         "disney.wd5.myworkdayjobs.com",
         "careers.hotstar.com"
       ]
+    },
+    {
+      "name": "Caterpillar",
+      "aliases": ["cat"],
+      "ats_domains": ["cat.wd5.myworkdayjobs.com", "careers.caterpillar.com"]
+    },
+    {
+      "name": "Ericsson",
+      "aliases": ["ericson"],
+      "ats_domains": ["jobs.ericsson.com"]
     }
   ]
 }

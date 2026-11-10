@@ -294,8 +294,8 @@ def fetch_via_dork(
     def _query_one(company: str) -> list[JobPosting]:
         """
         Build and execute the site-restricted DDG query for a single company,
-        update circuit-breaker state on rate limits, parse valid hits, and sleep
-        with jitter before finishing.
+        update circuit-breaker state on rate limits, parse valid hits, sleep
+        with jitter, and report completion via ``progress_callback``.
 
         Args:
             company (str): Canonical company name to query.
@@ -305,10 +305,9 @@ def fetch_via_dork(
                 if skipped or rate-limited.
         """
         query = _build_dork_query(company, location)
-        if progress_callback:
-            progress_callback(company, query or "skipped (no ATS domains)")
-
         if not query or rl_state["tripped"]:
+            if progress_callback:
+                progress_callback(company, query or "skipped (no ATS domains)")
             return []
 
         try:
@@ -321,6 +320,8 @@ def fetch_via_dork(
                 rl_state["streak"] += 1
                 if rl_state["streak"] >= 4:
                     rl_state["tripped"] = True
+            if progress_callback:
+                progress_callback(company, "rate-limited")
             return []
 
         co_jobs: list[JobPosting] = []
@@ -332,12 +333,14 @@ def fetch_via_dork(
                     break
 
         apply_jitter_delay(_DDG_INTER_QUERY_SLEEP)
+        if progress_callback:
+            progress_callback(company, query)
         return co_jobs
 
     if not companies:
         return []
 
-    with ThreadPoolExecutor(max_workers=min(3, len(companies))) as executor:
+    with ThreadPoolExecutor(max_workers=min(4, len(companies))) as executor:
         futures = [executor.submit(_query_one, co) for co in companies]
         for fut in as_completed(futures):
             try:

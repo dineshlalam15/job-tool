@@ -4,18 +4,19 @@ genai_jobs/engines/ats_engine.py
 Direct Career Portal API Engine — queries official ATS JSON/GraphQL endpoints
 and structured SSR career pages directly without relying solely on aggregators.
 
-Supported Direct Career Portal Adapters (17 portals + Amazon API = 18/34)
+Supported Direct Career Portal Adapters (19 portals + Amazon API = 20/36)
 ─────────────────────────────────────────────────────────────────────────
 * Google Careers       (`www.google.com/about/careers/applications/jobs/results/`)
 * Workday CXS API      (`*.myworkdayjobs.com` / `myworkdaysite.com`)
                        Salesforce, Adobe, Micron, Berkadia, Disney,
-                       Invesco, Quantiphi, Wells Fargo
+                       Invesco, Quantiphi, Wells Fargo, Caterpillar
 * Oracle Cloud HCM API (`*.fa.oraclecloud.com/hcmRestApi/...`)
                        JP Morgan Chase, CHUBB, Honeywell
 * Goldman Sachs API    (`api-higher.gs.com/gateway/api/v1/graphql`)
 * Deloitte South Asia  (`southasiacareers.deloitte.com`)
 * Synopsys Career Site (`careers.synopsys.com`)
 * Phenom People SSR    (`phApp.ddo`): eBay, HPE
+* Eightfold PCSX API   (`*/api/pcsx/search`): Ericsson
 """
 from __future__ import annotations
 
@@ -311,6 +312,11 @@ _WORKDAY_PORTALS: dict[str, dict[str, str]] = {
         "tenant": "wf",
         "site": "WellsFargoJobs",
         "url_prefix": "/recruiting/wf/WellsFargoJobs",
+    },
+    "Caterpillar": {
+        "host": "cat.wd5.myworkdayjobs.com",
+        "tenant": "cat",
+        "site": "CaterpillarCareers",
     },
 }
 
@@ -1218,6 +1224,201 @@ def _fetch_phenom_company(
     return jobs
 
 
+# ─── Eightfold PCSX JSON API (Ericsson) ──────────────────────────────────────
+
+_EIGHTFOLD_PORTALS: dict[str, dict[str, str]] = {
+    "Ericsson": {
+        "host": "jobs.ericsson.com",
+        "domain": "ericsson.com",
+    },
+}
+
+
+def _fetch_eightfold_company(
+    company: str,
+    cfg: dict[str, str],
+    location: str,
+    cutoff_date: Optional[date],
+    max_results: int,
+) -> list[JobPosting]:
+    """
+    Query an Eightfold-powered career portal's PCSX search JSON API across
+    configured search terms, pre-filter candidate positions by recency, location,
+    and title seniority, and concurrently fetch position details to verify
+    Gen-AI keyword relevance and experience requirements.
+
+    Args:
+        company (str): Canonical company name.
+        cfg (dict[str, str]): Eightfold configuration containing ``host`` and ``domain``.
+        location (str): Target search location string.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching ``JobPosting`` records from the Eightfold portal.
+    """
+    host = cfg["host"]
+    domain = cfg["domain"]
+    search_url = f"https://{host}/api/pcsx/search"
+    detail_url = f"https://{host}/api/pcsx/position_details"
+
+    headers = get_stealth_headers(
+        accept_type="application/json",
+        referer=f"https://{host}/careers",
+    )
+
+    is_india_target = not location or location.strip().lower() in ("india", "ind")
+    loc_param = "India" if is_india_target else location
+
+    seen_ids: set[str] = set()
+    candidates: list[dict] = []
+    jobs: list[JobPosting] = []
+    unlimited = not max_results or max_results <= 0
+
+    with httpx.Client(
+        headers=headers,
+        timeout=_HTTP_TIMEOUT,
+        limits=_HTTP_LIMITS,
+        follow_redirects=True,
+    ) as client:
+        for term in _get_ats_search_terms():
+            for start in (0, 10, 20):
+                try:
+                    resp = client.get(
+                        search_url,
+                        params={
+                            "domain": domain,
+                            "query": term,
+                            "location": loc_param,
+                            "start": start,
+                            "sort_by": "timestamp",
+                        },
+                    )
+                    if resp.status_code != 200:
+                        logger.debug("Eightfold %s HTTP %d for %r", company, resp.status_code, term)
+                        break
+                    data = resp.json().get("data") or {}
+                except Exception as exc:
+                    logger.debug("Eightfold %s search failed for %r: %s", company, term, exc)
+                    break
+
+                positions = data.get("positions") or []
+                if not positions:
+                    break
+
+                saw_in_window = False
+                for item in positions:
+                    pos_id = str(item.get("id") or "").strip()
+                    title = (item.get("name") or "").strip()
+                    if not pos_id or not title:
+                        continue
+
+                    posted_ts = item.get("postedTs")
+                    posted_on: Optional[date] = None
+                    if isinstance(posted_ts, (int, float)) and posted_ts > 0:
+                        posted_on = datetime.fromtimestamp(posted_ts, tz=timezone.utc).date()
+
+                    if cutoff_date and posted_on and posted_on < cutoff_date:
+                        continue
+                    saw_in_window = True
+
+                    if pos_id in seen_ids:
+                        continue
+                    seen_ids.add(pos_id)
+
+                    raw_locs = item.get("locations") or []
+                    loc_str = "; ".join(str(loc_val).strip() for loc_val in raw_locs[:2] if loc_val)
+                    if is_india_target and not is_india_location(loc_str, title):
+                        continue
+
+                    if _is_senior_title(title):
+                        continue
+
+                    pos_url = (item.get("positionUrl") or "").strip()
+                    full_url = (
+                        pos_url
+                        if pos_url.startswith("http")
+                        else f"https://{host}{pos_url or f'/careers/job/{pos_id}'}"
+                    )
+
+                    candidates.append(
+                        {
+                            "id": pos_id,
+                            "title": title,
+                            "raw_loc": loc_str,
+                            "posted_on": posted_on,
+                            "url": full_url,
+                        }
+                    )
+
+                total = data.get("count") or 0
+                if (start + len(positions)) >= total or not saw_in_window:
+                    break
+
+        if not candidates:
+            return []
+
+        def _hydrate(cand: dict) -> Optional[JobPosting]:
+            """
+            Fetch detailed job description HTML for one Eightfold position and
+            build a filtered ``JobPosting`` if Gen-AI keywords match.
+
+            Args:
+                cand (dict): Pre-filtered candidate dict containing ``id``,
+                    ``title``, ``raw_loc``, ``posted_on``, and ``url``.
+
+            Returns:
+                Optional[JobPosting]: Hydrated ``JobPosting`` if valid, else ``None``.
+            """
+            full_text = ""
+            try:
+                dr = client.get(
+                    detail_url,
+                    params={
+                        "domain": domain,
+                        "position_id": cand["id"],
+                        "location": loc_param,
+                        "hl": "en",
+                    },
+                )
+                if dr.status_code == 200:
+                    d_data = dr.json().get("data") or {}
+                    full_text = _strip_html(d_data.get("jobDescription") or "")
+            except Exception as exc:
+                logger.debug("Eightfold %s detail failed for %s: %s", company, cand["id"], exc)
+
+            if not matches_genai(cand["title"], full_text):
+                return None
+
+            exp_min, exp_max = parse_experience(full_text or cand["title"], title=cand["title"])
+            skills = detect_skills(cand["title"], full_text)
+            final_loc = cand["raw_loc"]
+            if is_india_target:
+                final_loc = extract_india_location(cand["raw_loc"]) or cand["raw_loc"] or "India"
+
+            return JobPosting(
+                company=company,
+                title=cand["title"],
+                location=final_loc or "India",
+                date_posted=cand["posted_on"],
+                url=cand["url"],
+                source="ats/eightfold",
+                description_snippet=truncate(full_text or cand["title"]),
+                exp_min=exp_min,
+                exp_max=exp_max,
+                skills=skills,
+            )
+
+        with ThreadPoolExecutor(max_workers=min(4, len(candidates))) as pool:
+            for job in pool.map(_hydrate, candidates):
+                if job:
+                    jobs.append(job)
+                    if not unlimited and len(jobs) >= max_results:
+                        break
+
+    return jobs
+
+
 # ─── Public Dispatcher ────────────────────────────────────────────────────────
 
 def get_supported_ats_companies() -> set[str]:
@@ -1230,12 +1431,13 @@ def get_supported_ats_companies() -> set[str]:
 
     Returns:
         set[str]: Supported canonical company names (Google, Goldman Sachs,
-            Deloitte, Synopsys, plus all Workday, Oracle, and Phenom portals).
+            Deloitte, Synopsys, plus all Workday, Oracle, Phenom, and Eightfold portals).
     """
     supported = {"Google", "Goldman Sachs", "Deloitte", "Synopsys"}
     supported.update(_WORKDAY_PORTALS.keys())
     supported.update(_ORACLE_PORTALS.keys())
     supported.update(_PHENOM_PORTALS.keys())
+    supported.update(_EIGHTFOLD_PORTALS.keys())
     return supported
 
 
@@ -1288,6 +1490,9 @@ def fetch_via_ats_apis(
     for co, base_url in _PHENOM_PORTALS.items():
         if co in target_set:
             tasks.append((co, lambda c=co, u=base_url: _fetch_phenom_company(c, u, location, cutoff_date, max_results)))
+    for co, cfg in _EIGHTFOLD_PORTALS.items():
+        if co in target_set:
+            tasks.append((co, lambda c=co, conf=cfg: _fetch_eightfold_company(c, conf, location, cutoff_date, max_results)))
 
     if not tasks:
         return []

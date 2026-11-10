@@ -209,7 +209,7 @@ def render_rich_table(jobs: list[JobPosting], title: str = "Gen-AI Job Postings"
     table.add_column("Posted", style="cyan", width=10, no_wrap=True)
     table.add_column("Exp", style="magenta", width=6, no_wrap=True)
     table.add_column("Skills", style="bright_green", min_width=10, ratio=2, overflow="fold")
-    table.add_column("Source", style="blue", width=12, no_wrap=True)
+    table.add_column("Source", style="blue", width=13, no_wrap=True)
 
     for idx, job in enumerate(jobs, start=1):
         title_link = Text(job.title, style=f"link {job.url}")
@@ -290,7 +290,12 @@ def run_pipeline(
     ats_supported = get_supported_ats_companies()
     ats_companies = [c for c in companies if c in ats_supported and c != "Amazon"] if sources in ("ats", "all") else []
     use_ats = bool(ats_companies)
-    use_dork = sources in ("dork", "all") and bool(companies)
+    dork_companies = (
+        [c for c in companies if c != "Amazon" and c not in ats_supported]
+        if sources == "all"
+        else list(companies)
+    )
+    use_dork = sources in ("dork", "all") and bool(dork_companies)
 
     summary_lines: dict[str, str] = {}
     lock = threading.Lock()
@@ -302,7 +307,7 @@ def run_pipeline(
         amz_terms = get_amazon_search_terms() if use_amazon else []
         amz_task = progress.add_task("[cyan]Amazon JSON API[/cyan]", total=len(amz_terms)) if use_amazon else None
         ats_task = progress.add_task("[green]Direct ATS APIs[/green]", total=len(ats_companies)) if use_ats else None
-        dork_task = progress.add_task("[yellow]DDG ATS Dork[/yellow]", total=len(companies)) if use_dork else None
+        dork_task = progress.add_task("[yellow]DDG ATS Dork[/yellow]", total=len(dork_companies)) if use_dork else None
 
         # Thread-safe callbacks
         def _run_amazon() -> tuple[str, list[JobPosting]]:
@@ -413,10 +418,10 @@ def run_pipeline(
                     progress.update(dork_task, description=f"[yellow]DDG Dork[/yellow] ▶ {company[:25]}")
 
             jobs = fetch_via_dork(
-                companies=companies, location=location, days=days, max_results=max_results, progress_callback=_cb
+                companies=dork_companies, location=location, days=days, max_results=max_results, progress_callback=_cb
             )
             with lock:
-                progress.update(dork_task, completed=len(companies))
+                progress.update(dork_task, completed=len(dork_companies))
             return ("dork", jobs)
 
         with ThreadPoolExecutor(max_workers=3) as pool:
@@ -436,7 +441,7 @@ def run_pipeline(
                     elif eng_name == "ats":
                         summary_lines["ats"] = f"  [green]✓[/green] Direct ATS APIs ({len(ats_companies)} portals) → [bold]{len(jobs)}[/bold] job(s)"
                     elif eng_name == "dork":
-                        summary_lines["dork"] = f"  [green]✓[/green] DDG ATS Dork → [bold]{len(jobs)}[/bold] job(s)"
+                        summary_lines["dork"] = f"  [green]✓[/green] DDG ATS Dork ({len(dork_companies)} portals) → [bold]{len(jobs)}[/bold] job(s)"
                 except Exception as exc:
                     logger.error("%s engine crashed: %s", eng_name, exc)
                     summary_lines[eng_name] = f"  [red]✗[/red] {eng_name} → failed ({exc})"

@@ -68,13 +68,14 @@ _NON_TECH_TITLE_PATTERNS = re.compile(
 # that appear identically across unrelated roles (e.g. Program Management, Pricing Ops BA)
 _CORPORATE_BOILERPLATE_PATTERNS = [
     # Salesforce universal Workday header/footer blurbs
-    re.compile(r"Ready\s+to\s+grow\s+your\s+career\s+at\s+the\s+company\s+leading\s+workforce\s+transformation\s+in\s+the\s+agentic\s+era\??[^.?!]*(?:[.?!]|$)", re.I),
+    re.compile(r"Ready\s+to\s+(?:grow|level[\s-]+up)\s+your\s+career\s+at\s+the\s+company\s+leading\s+workforce\s+transformation\s+in\s+the\s+agentic\s+era\??[^.?!]*(?:[.?!]|$)", re.I),
     re.compile(r"Agentforce\s+is\s+the\s+future\s+of\s+AI[^.?!]*(?:[.?!]|$)", re.I),
     re.compile(r"[^.?!]*\band\s+our\s+AI\s+agents\s+accelerate\s+your\s+impact\b[^.?!]*(?:[.?!]|$)", re.I),
     re.compile(r"[^.?!]*\bbacked\s+by\s+automation\s+and\s+AI\s+agents\b[^.?!]*(?:[.?!]|$)", re.I),
-    # Micron universal "About Micron" footer blurb
+    # Micron universal "About Micron" footer blurb & generic IT Copilot productivity text
     re.compile(r"Micron\s+Technology\s+is\s+a\s+world\s+leader\s+in\s+innovating\s+memory[^.]*?(?:\.|$)", re.I),
     re.compile(r"[^.?!]*\benabling\s+advances\s+in\s+artificial\s+intelligence\s+and\s+5G\b[^.?!]*(?:[.?!]|$)", re.I),
+    re.compile(r"[^.?!]*\bAI-enabled\s+(?:ways\s+of\s+working|productivity\s+and\s+engineering\s+tools),\s+including\s+Microsoft\s+Copilot,\s+Generative\s+AI\b[^.?!]*(?:[.?!]|$)", re.I),
     # Generic recruiting AI screening disclaimers (EEO / candidate assessment)
     re.compile(r"[^.?!]*\b(?:uses?|utilizes?)\s+artificial\s+intelligence(?:\s*\(\s*AI\s*\))?\s*(?:tools?)?\s+to\s+(?:help\s+(?:our\s+)?)?(?:recruiters|assess|screen|evaluate|review)\b[^.?!]*(?:[.?!]|$)", re.I),
     # Casual end-user office productivity mention (using AI assistants for daily emails/docs)
@@ -673,8 +674,10 @@ def job_matches_experience(
     strict_mode: bool = False,
 ) -> bool:
     """
-    Evaluate whether a job posting's parsed experience bounds ``(job_lo, job_hi)``
-    are compatible with the target filter range ``(target_lo, target_hi)``.
+    Evaluate whether a job posting's required experience meets the user's filter
+    bounds ``(target_lo, target_hi)`` by checking the posting's minimum required
+    years of experience (so ranges such as ``3–5 yr`` satisfy ``< 4 yr``
+    because ``3 <= 3``).
 
     Args:
         job_lo (int): Minimum required years for the job (``-1`` if unstated).
@@ -685,7 +688,8 @@ def job_matches_experience(
             ``job_hi == -1``.
 
     Returns:
-        bool: True if the posting satisfies the experience criteria, else False.
+        bool: True if the posting's minimum experience satisfies the filter criteria,
+            else False.
     """
     if target_lo == -1 and target_hi == -1:
         return True  # filter disabled
@@ -693,30 +697,13 @@ def job_matches_experience(
     if job_lo == -1 and job_hi == -1:
         return not strict_mode  # in strict mode, reject unverified roles
 
-    # Job has ceiling only (e.g. up to 2 yrs)
-    if job_lo <= 0 and job_hi != -1:
-        max_allowed = target_hi + 1 if target_hi != -1 else -1
-        if max_allowed != -1 and job_hi > max_allowed:
-            return False
-        if target_lo > 0 and job_hi < target_lo:
-            return False
-        return True
-
-    # Job has floor only (e.g. 3+ yrs, 5+ yrs)
-    if job_hi == -1:
-        if target_hi != -1 and job_lo > target_hi:
-            return False
-        return True
-
-    # Job has both bounds [job_lo, job_hi] (e.g. 2-4 yrs, 3-6 yrs, 11-15 yrs)
-    if target_hi != -1 and job_lo > target_hi:
+    # Check the minimum required years against target_hi (treating unstated floor <= 0 as 0)
+    min_required = max(job_lo, 0)
+    if target_hi != -1 and min_required > target_hi:
         return False
 
-    max_allowed = target_hi + 1 if target_hi != -1 else -1
-    if max_allowed != -1 and job_hi > max_allowed:
-        return False
-
-    if target_lo > 0 and job_hi < target_lo:
+    # When user specifies an explicit positive lower bound (e.g. "2-4"), exclude lower ceilings
+    if target_lo > 0 and job_hi != -1 and job_hi < target_lo:
         return False
 
     return True
