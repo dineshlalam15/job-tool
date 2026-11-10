@@ -35,8 +35,3 @@ htmlcov/
 Thumbs.db
 .vscode/
 .idea/
-
-# Generated job reports
-genai_jobs_report.csv
-genai_jobs_report.json
-genai_jobs_report.md

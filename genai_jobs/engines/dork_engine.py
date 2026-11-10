@@ -11,7 +11,7 @@ with Gen-AI keywords.  This catches roles that are live on official portals
 but NOT yet indexed by job aggregators.
 
 Example query:
-  site:amazon.jobs ("Generative AI" OR "GenAI" OR "LLM") "India"
+  site:amazon.jobs ("Generative AI" OR "Agentic AI" OR "LLM" OR "RAG") "India"
 
 The DDGS.text() results return title + URL + body snippet, which we parse
 to infer job title and validate the Gen-AI match.
@@ -19,7 +19,7 @@ to infer job title and validate the Gen-AI match.
 Robustness
 ──────────
 * We rate-limit calls to avoid DuckDuckGo 202 / Ratelimit errors.
-* Tenacity retries on RatelimitException with longer back-off.
+* Retries rate-limited DDG requests with exponential backoff and a circuit breaker.
 * Each company query is wrapped in try/except so one failure never aborts all.
 """
 from __future__ import annotations
@@ -30,29 +30,17 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
-from urllib.parse import urlparse
 
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-    before_sleep_log,
-)
-
+from genai_jobs.config import get_company_ats_domains, get_search_terms
 from genai_jobs.constants import (
-    COMPANY_ATS_DOMAINS,
     DEFAULT_DAYS,
     DEFAULT_MAX_RESULTS,
     MAX_RETRY_ATTEMPTS,
-    RETRY_WAIT_MAX,
-    RETRY_WAIT_MIN,
 )
 from genai_jobs.models import JobPosting
 from genai_jobs.utils.filters import (
     company_from_url,
     matches_genai,
-    resolve_company,
     truncate,
     detect_skills,
     parse_experience,
@@ -66,18 +54,30 @@ logger = logging.getLogger(__name__)
 # DDG rate-limit guard: seconds to sleep between consecutive company queries
 _DDG_INTER_QUERY_SLEEP: float = 0.35
 
-# Updated DDG clause matching GenAI, Artificial Intelligence/Engineering, Agentic AI
-_GENAI_DDG_CLAUSE = '("Generative AI" OR "Agentic AI" OR "Artificial Intelligence" OR "AI Engineer" OR "LLM")'
+_DEFAULT_DORK_TERMS = ["Generative AI", "Agentic AI", "LLM", "RAG"]
 
 _INDIA_LOCATIONS_QUERY = '("India" OR "Bengaluru" OR "Hyderabad" OR "Pune")'
 
 
+def _build_genai_ddg_clause() -> str:
+    """Build DuckDuckGo boolean OR search clause from configured search terms."""
+    terms = [t.strip() for t in (get_search_terms() or _DEFAULT_DORK_TERMS) if t.strip()]
+    if not terms:
+        terms = _DEFAULT_DORK_TERMS
+    return "(" + " OR ".join(f'"{t}"' for t in terms) + ")"
+
+
 def _build_dork_query(company: str, location: str) -> str:
     """
-    Build a site-restricted DDG query for a company using its known ATS domains.
-    Falls back to a plain company-name query if no ATS domains are configured.
+    Build a site-restricted DDG query for a company using its configured career
+    portal / ATS domains. Returns empty string if no career domains exist so
+    non-portal job sites are never queried.
     """
-    domains = COMPANY_ATS_DOMAINS.get(company, [])
+    domains = get_company_ats_domains().get(company, [])
+    if not domains:
+        return ""
+
+    genai_clause = _build_genai_ddg_clause()
     if location:
         if location.strip().lower() in ("india", "ind"):
             location_part = _INDIA_LOCATIONS_QUERY
@@ -86,11 +86,8 @@ def _build_dork_query(company: str, location: str) -> str:
     else:
         location_part = ""
 
-    if domains:
-        site_part = " OR ".join(f"site:{d}" for d in domains)
-        query = f"({site_part}) {_GENAI_DDG_CLAUSE}"
-    else:
-        query = f'"{company}" {_GENAI_DDG_CLAUSE} jobs'
+    site_part = " OR ".join(f"site:{d}" for d in domains)
+    query = f"({site_part}) {genai_clause}"
 
     if location_part:
         query += f" {location_part}"
@@ -101,26 +98,13 @@ def _build_dork_query(company: str, location: str) -> str:
 # ─── DDG fetch with retry ─────────────────────────────────────────────────────
 
 def _ddg_search(query: str, max_results: int, timelimit: Optional[str] = None) -> list[dict]:
-    """
-    Call DDGS.text() with retry; returns raw result list.
-
-    Supports both the new ``ddgs`` package and the legacy
-    ``duckduckgo_search`` package (which now just re-exports from ``ddgs``).
-    """
-    # Prefer the canonical renamed package; fall back to the legacy wrapper.
+    """Call DDGS.text() with retry; returns raw result list."""
     try:
         from ddgs import DDGS
         from ddgs.exceptions import DDGSException
     except ImportError:
-        try:
-            from duckduckgo_search import DDGS  # type: ignore[no-redef]
-            from duckduckgo_search.exceptions import DuckDuckGoSearchException as DDGSException  # type: ignore[no-redef]
-        except ImportError:
-            logger.error(
-                "Neither 'ddgs' nor 'duckduckgo-search' is installed. "
-                "Run: pip install ddgs"
-            )
-            return []
+        logger.error("'ddgs' is not installed. Run: pip install ddgs")
+        return []
 
     attempts = min(2, MAX_RETRY_ATTEMPTS)
     for attempt in range(1, attempts + 1):
@@ -268,9 +252,9 @@ def fetch_via_dork(
     def _query_one(company: str) -> list[JobPosting]:
         query = _build_dork_query(company, location)
         if progress_callback:
-            progress_callback(company, query)
+            progress_callback(company, query or "skipped (no ATS domains)")
 
-        if rl_state["tripped"]:
+        if not query or rl_state["tripped"]:
             return []
 
         try:

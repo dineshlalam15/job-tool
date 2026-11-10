@@ -2,93 +2,34 @@
   "companies": [
     {
       "name": "Google",
-      "aliases": [
-        "google",
-        "alphabet",
-        "google india",
-        "google llc"
-      ],
-      "ats_domains": [
-        "careers.google.com",
-        "google.com/about/careers"
-      ]
+      "aliases": ["alphabet"],
+      "ats_domains": ["careers.google.com", "google.com/about/careers"]
     },
     {
       "name": "Microsoft",
-      "aliases": [
-        "microsoft",
-        "microsoft india",
-        "microsoft corporation",
-        "msft"
-      ],
-      "ats_domains": [
-        "careers.microsoft.com",
-        "jobs.careers.microsoft.com"
-      ]
+      "aliases": ["msft"],
+      "ats_domains": ["careers.microsoft.com", "jobs.careers.microsoft.com"]
     },
     {
       "name": "Apple",
-      "aliases": [
-        "apple",
-        "apple india",
-        "apple inc"
-      ],
-      "ats_domains": [
-        "jobs.apple.com"
-      ]
+      "ats_domains": ["jobs.apple.com"]
     },
     {
       "name": "Amazon",
-      "aliases": [
-        "amazon",
-        "amazon web services",
-        "aws",
-        "amazon india",
-        "amazon development centre",
-        "amazon.com"
-      ],
-      "ats_domains": [
-        "amazon.jobs",
-        "www.amazon.jobs"
-      ],
-      "api_adapter": "amazon"
+      "aliases": ["aws"],
+      "ats_domains": ["amazon.jobs"]
     },
     {
       "name": "Salesforce",
-      "aliases": [
-        "salesforce",
-        "salesforce.com",
-        "salesforce india"
-      ],
-      "ats_domains": [
-        "salesforce.wd12.myworkdayjobs.com",
-        "careers.salesforce.com"
-      ]
+      "ats_domains": ["salesforce.wd12.myworkdayjobs.com", "careers.salesforce.com"]
     },
     {
       "name": "IBM Labs",
-      "aliases": [
-        "ibm",
-        "ibm labs",
-        "ibm research",
-        "ibm india software labs",
-        "ibm india",
-        "international business machines"
-      ],
-      "ats_domains": [
-        "ibm.com/careers",
-        "ibm.biz"
-      ]
+      "aliases": ["ibm"],
+      "ats_domains": ["ibm.com/careers", "ibm.biz"]
     },
     {
       "name": "Deloitte",
-      "aliases": [
-        "deloitte",
-        "deloitte usi",
-        "deloitte consulting",
-        "deloitte india",
-        "deloitte & touche"
-      ],
       "ats_domains": [
         "southasiacareers.deloitte.com",
         "jobsindia.deloitte.com",
@@ -98,11 +39,6 @@
     },
     {
       "name": "Quantiphi",
-      "aliases": [
-        "quantiphi",
-        "quantiphi analytics",
-        "quantiphi inc"
-      ],
       "ats_domains": [
         "quantiphi.com/careers",
         "quantiphi.wd1.myworkdayjobs.com",
@@ -111,39 +47,16 @@
     },
     {
       "name": "JP Morgan Chase",
-      "aliases": [
-        "jp morgan chase",
-        "jpmorgan chase",
-        "jpmc",
-        "jpmorgan",
-        "jp morgan",
-        "j.p. morgan"
-      ],
-      "ats_domains": [
-        "jpmc.fa.oraclecloud.com",
-        "careers.jpmorgan.com"
-      ]
+      "aliases": ["jpmc", "jpmorgan"],
+      "ats_domains": ["jpmc.fa.oraclecloud.com", "careers.jpmorgan.com"]
     },
     {
       "name": "Goldman Sachs",
-      "aliases": [
-        "goldman sachs",
-        "goldman",
-        "gs",
-        "goldman sachs services"
-      ],
-      "ats_domains": [
-        "goldmansachs.com/careers",
-        "goldmansachs.tal.net"
-      ]
+      "aliases": ["gs", "goldman"],
+      "ats_domains": ["goldmansachs.com/careers", "goldmansachs.tal.net", "higher.gs.com"]
     },
     {
       "name": "Wells Fargo",
-      "aliases": [
-        "wells fargo",
-        "wells fargo india",
-        "wells fargo & company"
-      ],
       "ats_domains": [
         "wellsfargo.com/about/careers",
         "wd1.myworkdaysite.com/recruiting/wf/WellsFargoJobs",
@@ -152,112 +65,44 @@
     },
     {
       "name": "DBS",
-      "aliases": [
-        "dbs",
-        "dbs bank",
-        "dbs bank india",
-        "dbs tech"
-      ],
-      "ats_domains": [
-        "dbs.com/careers",
-        "dbs.taleo.net"
-      ]
+      "aliases": ["dbs bank"],
+      "ats_domains": ["dbs.com/careers", "dbs.taleo.net"]
     },
     {
       "name": "Micron",
-      "aliases": [
-        "micron",
-        "micron technology",
-        "micron india"
-      ],
-      "ats_domains": [
-        "micron.wd1.myworkdayjobs.com",
-        "micron.com/careers"
-      ]
+      "ats_domains": ["micron.wd1.myworkdayjobs.com", "micron.com/careers"]
     },
     {
       "name": "Synopsys",
-      "aliases": [
-        "synopsys",
-        "synopsys inc",
-        "synopsys india"
-      ],
       "ats_domains": [
         "synopsys.wd1.myworkdayjobs.com",
-        "synopsys.com/careers"
+        "synopsys.com/careers",
+        "careers.synopsys.com"
       ]
     },
     {
       "name": "Samsung",
-      "aliases": [
-        "samsung",
-        "samsung r&d",
-        "samsung electronics",
-        "samsung sds",
-        "samsung research"
-      ],
-      "ats_domains": [
-        "samsung.com/careers",
-        "sec.taleo.net",
-        "sri.taleo.net"
-      ]
+      "ats_domains": ["samsung.com/careers", "sec.taleo.net", "sri.taleo.net"]
     },
     {
       "name": "Berkadia",
-      "aliases": [
-        "berkadia",
-        "berkadia india",
-        "berkadia commercial mortgages"
-      ],
-      "ats_domains": [
-        "berkadia.wd1.myworkdayjobs.com",
-        "berkadia.com/careers"
-      ]
+      "ats_domains": ["berkadia.wd1.myworkdayjobs.com", "berkadia.com/careers"]
     },
     {
       "name": "Barclays",
-      "aliases": [
-        "barclays",
-        "barclays bank",
-        "barclays india",
-        "barclays global service centre"
-      ],
-      "ats_domains": [
-        "search.jobs.barclays",
-        "barclays.taleo.net"
-      ]
+      "ats_domains": ["search.jobs.barclays", "barclays.taleo.net"]
     },
     {
       "name": "Invesco",
-      "aliases": [
-        "invesco",
-        "invesco ltd",
-        "invesco india"
-      ],
-      "ats_domains": [
-        "careers.invesco.com",
-        "invesco.wd1.myworkdayjobs.com/IVZ"
-      ]
+      "ats_domains": ["careers.invesco.com", "invesco.wd1.myworkdayjobs.com/IVZ"]
     },
     {
       "name": "Tiger Analytics",
-      "aliases": [
-        "tiger analytics",
-        "tiger analytics india"
-      ],
-      "ats_domains": [
-        "tigeranalytics.com/careers",
-        "jobs.lever.co/tigeranalytics"
-      ]
+      "ats_domains": ["tigeranalytics.com/careers", "jobs.lever.co/tigeranalytics"]
     },
     {
       "name": "Verisk Analytics",
-      "aliases": [
-        "verisk",
-        "verisk analytics",
-        "verisk india",
-        "wood mackenzie"
-      ],
+      "aliases": ["verisk"],
       "ats_domains": [
         "careers.verisk.com",
         "verisk.wd1.myworkdayjobs.com",
@@ -266,34 +111,14 @@
     },
     {
       "name": "ADP",
-      "aliases": [
-        "adp",
-        "adp india",
-        "automatic data processing"
-      ],
-      "ats_domains": [
-        "jobs.adp.com"
-      ]
+      "ats_domains": ["jobs.adp.com"]
     },
     {
       "name": "Coforge",
-      "aliases": [
-        "coforge",
-        "coforge limited",
-        "niit technologies"
-      ],
-      "ats_domains": [
-        "careers.coforge.com"
-      ]
+      "ats_domains": ["careers.coforge.com"]
     },
     {
       "name": "CHUBB",
-      "aliases": [
-        "chubb",
-        "chubb business services",
-        "chubb india",
-        "chubb limited"
-      ],
       "ats_domains": [
         "fa-ewgu-saasfaprod1.fa.ocs.oraclecloud.com",
         "careers.chubb.com",
@@ -302,143 +127,51 @@
     },
     {
       "name": "ICICI Bank",
-      "aliases": [
-        "icici bank",
-        "icici",
-        "icici bank ltd",
-        "icici bank limited"
-      ],
-      "ats_domains": [
-        "icicicareers.com",
-        "www.icicicareers.com"
-      ]
+      "aliases": ["icici"],
+      "ats_domains": ["icicicareers.com"]
     },
     {
       "name": "Axis Bank",
-      "aliases": [
-        "axis bank",
-        "axis",
-        "axis bank ltd",
-        "axis bank limited"
-      ],
-      "ats_domains": [
-        "axisbank.com/careers",
-        "axisbank.taleo.net"
-      ]
+      "aliases": ["axis"],
+      "ats_domains": ["axisbank.com/careers", "axisbank.taleo.net"]
     },
     {
       "name": "Adobe",
-      "aliases": [
-        "adobe",
-        "adobe systems",
-        "adobe india"
-      ],
-      "ats_domains": [
-        "adobe.wd5.myworkdayjobs.com",
-        "careers.adobe.com"
-      ]
+      "ats_domains": ["adobe.wd5.myworkdayjobs.com", "careers.adobe.com"]
     },
     {
       "name": "HPE",
-      "aliases": [
-        "hpe",
-        "hewlett packard enterprise",
-        "hewlett-packard enterprise",
-        "hp enterprise"
-      ],
-      "ats_domains": [
-        "careers.hpe.com"
-      ]
+      "aliases": ["hewlett packard enterprise"],
+      "ats_domains": ["careers.hpe.com"]
     },
     {
       "name": "eBay",
-      "aliases": [
-        "ebay",
-        "ebay inc",
-        "ebay india"
-      ],
-      "ats_domains": [
-        "ebayinc.com/careers",
-        "jobs.ebayinc.com"
-      ]
+      "ats_domains": ["ebayinc.com/careers", "jobs.ebayinc.com"]
     },
     {
       "name": "Flipkart",
-      "aliases": [
-        "flipkart",
-        "flipkart india",
-        "flipkart internet"
-      ],
-      "ats_domains": [
-        "flipkartcareers.com"
-      ]
+      "ats_domains": ["flipkartcareers.com"]
     },
     {
       "name": "JODO",
-      "aliases": [
-        "jodo",
-        "jodo pay",
-        "jodo india",
-        "flextur"
-      ],
-      "ats_domains": [
-        "jodo.in/careers",
-        "jobs.lever.co/jodo",
-        "wellfound.com/company/jodo"
-      ]
+      "ats_domains": ["jodo.in/careers", "jobs.lever.co/jodo"]
     },
     {
       "name": "Honeywell",
-      "aliases": [
-        "honeywell",
-        "honeywell technology solutions",
-        "honeywell international"
-      ],
-      "ats_domains": [
-        "ibqbjb.fa.ocs.oraclecloud.com",
-        "careers.honeywell.com"
-      ]
+      "ats_domains": ["ibqbjb.fa.ocs.oraclecloud.com", "careers.honeywell.com"]
     },
     {
       "name": "HCL",
-      "aliases": [
-        "hcl",
-        "hcltech",
-        "hcl technologies",
-        "hcl tech"
-      ],
-      "ats_domains": [
-        "hcltech.com/careers"
-      ]
+      "aliases": ["hcltech"],
+      "ats_domains": ["hcltech.com/careers"]
     },
     {
       "name": "Cyient",
-      "aliases": [
-        "cyient",
-        "cyient ltd",
-        "cyient limited",
-        "infotech enterprises"
-      ],
-      "ats_domains": [
-        "cyient.wd3.myworkdayjobs.com",
-        "cyient.com/careers"
-      ]
+      "ats_domains": ["cyient.wd3.myworkdayjobs.com", "cyient.com/careers"]
     },
     {
       "name": "Disney",
-      "aliases": [
-        "disney",
-        "the walt disney company",
-        "walt disney",
-        "walt disney company",
-        "disney entertainment",
-        "disney streaming",
-        "disney+ hotstar",
-        "disney hotstar",
-        "hotstar",
-        "disney india",
-        "disney star"
-      ],
+      "aliases": ["hotstar"],
       "ats_domains": [
         "disneycareers.com",
         "jobs.disneycareers.com",

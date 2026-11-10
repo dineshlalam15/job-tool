@@ -4,15 +4,14 @@ genai_jobs/utils/security.py
 Security, anti-bot mitigation, and stealth request management.
 
 Implements realistic browser fingerprinting, rotating user agents, modern
-Client Hints, jittered delays, and WAF / Cloudflare challenge detection
-to ensure scrapes against company career portals are not blocked.
+Client Hints, and jittered delays to avoid bot blocks against career portals.
 """
 from __future__ import annotations
 
 import logging
 import random
 import time
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +43,6 @@ _REALISTIC_USER_AGENTS = [
         '"macOS"',
     ),
 ]
-
-
-def get_random_user_agent() -> str:
-    """Return a modern realistic desktop browser User-Agent."""
-    return random.choice(_REALISTIC_USER_AGENTS)[0]
 
 
 def get_stealth_headers(
@@ -97,28 +91,4 @@ def apply_jitter_delay(base_seconds: float = 1.0, jitter_ratio: float = 0.5) -> 
     max_delay = base_seconds * (1 + jitter_ratio)
     delay = random.uniform(min_delay, max_delay)
     time.sleep(delay)
-
-
-def is_bot_challenge_response(status_code: int, response_text: str = "") -> bool:
-    """
-    Detect whether an HTTP response is a bot/WAF challenge (Cloudflare, Akamai, Datadome, Incapsula).
-    """
-    if status_code in (403, 429, 503):
-        lower = response_text.lower()
-        waf_signatures = (
-            "cf-chl-bypass",
-            "challenge-platform",
-            "cloudflare",
-            "attention required! | cloudflare",
-            "just a moment...",
-            "akamai",
-            "datadome",
-            "incapsula",
-            "verify you are human",
-            "access denied",
-            "robot or human",
-        )
-        if any(sig in lower for sig in waf_signatures):
-            return True
-    return False
 

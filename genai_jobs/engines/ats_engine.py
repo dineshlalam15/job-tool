@@ -30,6 +30,7 @@ from urllib.parse import quote_plus
 
 import httpx
 
+from genai_jobs.config import get_search_terms
 from genai_jobs.constants import DEFAULT_DAYS, DEFAULT_MAX_RESULTS
 from genai_jobs.models import JobPosting
 from genai_jobs.utils.filters import (
@@ -47,6 +48,12 @@ logger = logging.getLogger(__name__)
 
 _HTTP_TIMEOUT = httpx.Timeout(9.0, connect=4.5)
 _HTTP_LIMITS = httpx.Limits(max_connections=12, max_keepalive_connections=8)
+_DEFAULT_ATS_SEARCH_TERMS = ["Generative AI", "Agentic AI", "LLM", "RAG"]
+
+
+def _get_ats_search_terms() -> list[str]:
+    """Return configured search terms (defaults to Generative AI, Agentic AI, LLM, RAG)."""
+    return get_search_terms() or list(_DEFAULT_ATS_SEARCH_TERMS)
 
 
 def _strip_html(raw: str) -> str:
@@ -105,8 +112,8 @@ def _fetch_google_careers(
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
-    """Fetch Google India GenAI/AI/Python roles directly from Google Careers."""
-    queries = ["Generative AI", "AI Engineer", "Machine Learning"]
+    """Fetch Google India GenAI roles directly from Google Careers."""
+    queries = _get_ats_search_terms()
     loc_param = "India" if (not location or "india" in location.lower()) else location
     headers = get_stealth_headers("text/html,application/xhtml+xml")
 
@@ -286,12 +293,7 @@ def _fetch_workday_company(
 
     is_india_target = not location or location.strip().lower() in ("india", "ind")
     loc_suffix = " India" if is_india_target else f" {location}"
-    search_terms = [
-        f"Generative AI{loc_suffix}",
-        f"Agentic AI{loc_suffix}",
-        f"AI{loc_suffix}",
-        f"Python{loc_suffix}",
-    ]
+    search_terms = [f"{term}{loc_suffix}" for term in _get_ats_search_terms()]
 
     seen_paths: set[str] = set()
     candidates: list[dict] = []
@@ -456,7 +458,7 @@ def _fetch_oracle_company(
     jobs: list[JobPosting] = []
     unlimited = not max_results or max_results <= 0
 
-    keywords = ["Generative AI", "AI", "Python", "Machine Learning"]
+    keywords = _get_ats_search_terms()
     with httpx.Client(
         headers=headers,
         timeout=_HTTP_TIMEOUT,
@@ -730,7 +732,7 @@ def _fetch_deloitte_portal(
         limits=_HTTP_LIMITS,
         follow_redirects=True,
     ) as client:
-        for q in ("Generative AI", "Agentic AI", "AI", "Python"):
+        for q in _get_ats_search_terms():
             url = f"{base_url}/search/?q={quote_plus(q)}&locationsearch={quote_plus(loc_q)}"
             try:
                 r = client.get(url)
@@ -851,7 +853,7 @@ def _fetch_synopsys_portal(
         limits=_HTTP_LIMITS,
         follow_redirects=True,
     ) as client:
-        for kw in ("AI", "Python"):
+        for kw in _get_ats_search_terms():
             search_url = (
                 f"{base_url}/search-jobs/results"
                 f"?ActiveFacetID=0&CurrentPage=1&RecordsPerPage=30"
@@ -974,7 +976,7 @@ def _fetch_phenom_company(
     unlimited = not max_results or max_results <= 0
 
     with httpx.Client(headers=headers, timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
-        for kw in ["AI", "Python"]:
+        for kw in _get_ats_search_terms():
             if not unlimited and len(jobs) >= max_results:
                 break
             url = f"{base_url}?keywords={kw}&location={'India' if is_india_target else location}"

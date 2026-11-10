@@ -19,14 +19,14 @@ class JobPosting(BaseModel):
     location: str = ""
     date_posted: Optional[date] = None
     url: str
-    source: str  # e.g. "jobspy/linkedin", "dork/ddg", "amazon-api"
-    description_snippet: str = ""  # first ~300 chars of description for display
+    source: str  # e.g. "ats/workday", "amazon-api", "dork/ddg"
+    description_snippet: str = ""  # first ~300 chars of description
 
-    # Parsed experience bounds (EXPERIENCE_UNKNOWN = -1 means not found)
+    # Parsed experience bounds (-1 means not found)
     exp_min: int = -1   # minimum years required
     exp_max: int = -1   # maximum years required (-1 = open-ended / unknown)
 
-    # Detected skillset tags (e.g. GenAI, Agentic AI, RAG, Python)
+    # Detected skillset tags (e.g. Generative AI, Agentic AI, LLM, RAG)
     skills: list[str] = Field(default_factory=list)
 
     # ── validators ───────────────────────────────────────────────────────────
@@ -80,18 +80,5 @@ class JobPosting(BaseModel):
 
     @property
     def skills_label(self) -> str:
-        """Comma-separated skills label (e.g. 'GenAI, Agentic AI, Python')."""
+        """Comma-separated skills label (e.g. 'Generative AI, Agentic AI, LLM, RAG')."""
         return ", ".join(self.skills) if self.skills else "GenAI"
-
-    def to_dict(self) -> dict:
-        return {
-            "company": self.company,
-            "title": self.title,
-            "location": self.location,
-            "date_posted": self.date_str,
-            "experience": self.experience_label,
-            "skills": self.skills_label,
-            "source": self.source,
-            "url": self.url,
-            "description_snippet": self.description_snippet,
-        }

@@ -5,9 +5,9 @@ External configuration loader ensuring loose coupling across companies,
 skillsets, and application settings.
 
 Configuration files (JSON format) located in `config/`:
-  - `companies.json`: Company names, aliases, ATS career domains, and API adapters.
-  - `skills.json`: Search terms, Tier-1 & Tier-2 keywords, and skills detection map.
-  - `settings.json`: Default days, experience bounds, location, timeouts, sites.
+  - `companies.json`: Company names, CLI shorthand aliases, and official ATS career domains.
+  - `skills.json`: Core search terms and skills detection / matching rules.
+  - `settings.json`: Default days, experience bounds, location, max results, and sources.
 
 To add/remove companies, target different skills (e.g., DevOps, Golang, Data),
 or alter posting timeframes, simply update the JSON files without modifying code.
@@ -31,8 +31,6 @@ class CompanyItem(BaseModel):
     name: str
     aliases: list[str] = Field(default_factory=list)
     ats_domains: list[str] = Field(default_factory=list)
-    linkedin_ids: list[str] = Field(default_factory=list)
-    api_adapter: Optional[str] = None
 
 
 class CompaniesConfig(BaseModel):
@@ -41,8 +39,6 @@ class CompaniesConfig(BaseModel):
 
 class SkillsConfig(BaseModel):
     search_terms: list[str] = Field(default_factory=list)
-    tier1_keywords: list[str] = Field(default_factory=list)
-    tier2_keywords: list[str] = Field(default_factory=list)
     skills_detection: dict[str, list[str]] = Field(default_factory=dict)
 
 
@@ -53,15 +49,7 @@ class SettingsConfig(BaseModel):
     default_location: str = "India"
     default_max_results: int = 0
     default_sources: str = "all"
-    jobspy_sites: list[str] = Field(
-        default_factory=lambda: ["indeed", "naukri", "linkedin"]
-    )
-    inter_request_delay: float = 1.0
-    proxies: list[str] = Field(default_factory=list)
-    request_timeout_seconds: int = 30
     max_retry_attempts: int = 3
-    retry_wait_min: float = 2.0
-    retry_wait_max: float = 10.0
     amazon_api_url: str = "https://www.amazon.jobs/en/search.json"
 
 
@@ -197,36 +185,35 @@ def get_company_ats_domains() -> dict[str, list[str]]:
     return {c.name: c.ats_domains for c in cfg.companies.companies}
 
 
-def get_company_linkedin_ids() -> dict[str, list[str]]:
-    cfg = get_config()
-    return {c.name: c.linkedin_ids for c in cfg.companies.companies if c.linkedin_ids}
-
-
 def get_search_terms() -> list[str]:
     cfg = get_config()
     return cfg.skills.search_terms or [
-        "Generative AI Python",
-        "Agentic AI Python",
-        "RAG Python",
         "Generative AI",
         "Agentic AI",
+        "LLM",
         "RAG",
-        "LLM Python",
-        "AI Agent",
     ]
-
-
-def get_tier1_keywords() -> list[str]:
-    cfg = get_config()
-    return [k.lower().strip() for k in cfg.skills.tier1_keywords]
-
-
-def get_tier2_keywords() -> list[str]:
-    cfg = get_config()
-    return [k.lower().strip() for k in cfg.skills.tier2_keywords]
 
 
 def get_skills_detection_map() -> dict[str, list[str]]:
     cfg = get_config()
     return cfg.skills.skills_detection
+
+
+def get_match_keywords() -> list[str]:
+    """Return deduplicated lowercase keywords derived from skills_detection and search_terms."""
+    seen: set[str] = set()
+    keywords: list[str] = []
+    for kws in get_skills_detection_map().values():
+        for kw in kws:
+            norm = kw.lower().strip()
+            if norm and norm not in seen:
+                seen.add(norm)
+                keywords.append(norm)
+    for term in get_search_terms():
+        norm = term.lower().strip()
+        if norm and norm not in seen:
+            seen.add(norm)
+            keywords.append(norm)
+    return keywords or ["generative ai", "genai", "gen ai", "agentic ai", "llm", "rag"]
 

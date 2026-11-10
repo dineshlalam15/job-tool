@@ -26,13 +26,12 @@ from tenacity import (
     before_sleep_log,
 )
 
+from genai_jobs.config import get_search_terms
 from genai_jobs.constants import (
     AMAZON_JOBS_API,
     DEFAULT_DAYS,
     DEFAULT_MAX_RESULTS,
     MAX_RETRY_ATTEMPTS,
-    RETRY_WAIT_MAX,
-    RETRY_WAIT_MIN,
 )
 from genai_jobs.models import JobPosting
 from genai_jobs.utils.filters import (
@@ -51,14 +50,17 @@ _AMAZON_BASE_URL = "https://www.amazon.jobs"
 _AMAZON_PAGE_SIZE = 100
 _MAX_OFFSET_PER_TERM = 300
 
-_AMAZON_SEARCH_TERMS = [
+_DEFAULT_AMAZON_SEARCH_TERMS = [
     "Generative AI",
     "Agentic AI",
     "LLM",
     "RAG",
-    "Machine Learning Python",
-    "FastAPI",
 ]
+
+
+def get_amazon_search_terms() -> list[str]:
+    """Return configured search terms (defaults to Generative AI, Agentic AI, LLM, RAG)."""
+    return get_search_terms() or list(_DEFAULT_AMAZON_SEARCH_TERMS)
 
 
 # ─── HTTP client helpers ──────────────────────────────────────────────────────
@@ -233,7 +235,7 @@ def fetch_amazon_jobs(
         timeout=httpx.Timeout(12.0, connect=6.0),
         follow_redirects=True,
     ) as client:
-        for term in _AMAZON_SEARCH_TERMS:
+        for term in get_amazon_search_terms():
             if not unlimited and len(all_jobs) >= max_results:
                 break
 

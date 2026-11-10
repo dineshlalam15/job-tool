@@ -8,13 +8,11 @@ Usage examples
   genai-jobs                                     # all 34 companies, India, 7 days, <4 yrs
   genai-jobs -c Amazon -c IBM -l Hyderabad       # two companies, one city
   genai-jobs -d 7 -m 20 -s dork                 # dork only, 7 days, 20 results
-  genai-jobs -e json -e md -l "USA"             # US jobs, export JSON + MD
   genai-jobs --list-companies                    # print all configured companies
 """
 from __future__ import annotations
 
 import logging
-import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -28,6 +26,7 @@ from genai_jobs.constants import (
     DEFAULT_EXPERIENCE,
     DEFAULT_LOCATION,
     DEFAULT_MAX_RESULTS,
+    DEFAULT_SOURCES,
     refresh_constants,
 )
 from genai_jobs.pipeline import run_pipeline
@@ -38,9 +37,9 @@ from genai_jobs.utils.filters import validate_company_names
 app = typer.Typer(
     name="genai-jobs",
     help=(
-        "Fetch active Generative AI and ML job postings from 34 target companies "
-        "(Google, Microsoft, Apple, Amazon, Salesforce, Disney, JPMC, Goldman Sachs, …) across Indeed, "
-        "LinkedIn, DuckDuckGo ATS dorking, and native APIs."
+        "Fetch active Generative AI job postings from 34 target companies "
+        "(Google, Microsoft, Apple, Amazon, Salesforce, Disney, JPMC, Goldman Sachs, …) "
+        "strictly from their official career portals (direct ATS APIs, Amazon API, and ATS dorking)."
     ),
     add_completion=False,
     rich_markup_mode="rich",
@@ -59,8 +58,8 @@ def _configure_logging(verbose: bool) -> None:
         datefmt="%H:%M:%S",
     )
     if not verbose:
-        # Suppress noisy internal error outputs from third-party scraping libraries
-        for noisy in ("jobspy", "ddgs", "duckduckgo_search", "httpx", "httpcore", "primp"):
+        # Suppress noisy internal error outputs from third-party libraries
+        for noisy in ("ddgs", "httpx", "httpcore", "primp"):
             logging.getLogger(noisy).setLevel(logging.CRITICAL)
 
 
@@ -146,34 +145,13 @@ def main(
         typer.Option(
             "--sources", "-s",
             help=(
-                "Engines to use. "
-                "Choices: 'ats' (Amazon API + direct career portal APIs — ultra-fast ~15s), "
-                "'jobspy' (Indeed/Naukri/LinkedIn aggregators), 'dork' (DDG ATS dorking), "
-                "'all' (all engines). Default: all."
+                "Career-portal engines to use. "
+                "Choices: 'ats' (Amazon API + direct career portal APIs), "
+                "'dork' (DuckDuckGo career-portal ATS dorking), "
+                "'all' (all company career-portal engines). Default: all."
             ),
         ),
-    ] = "all",
-
-    # ── export format(s) ─────────────────────────────────────────────────────
-    export_format: Annotated[
-        Optional[list[str]],
-        typer.Option(
-            "--export", "-e",
-            help=(
-                "Export format(s) in addition to the auto-saved CSV + MD. "
-                "Choices: csv, json, md. Repeatable."
-            ),
-        ),
-    ] = None,
-
-    # ── output directory ─────────────────────────────────────────────────────
-    output_dir: Annotated[
-        Path,
-        typer.Option(
-            "--output-dir", "-o",
-            help="Directory where report files are saved. Default: current directory.",
-        ),
-    ] = Path("."),
+    ] = DEFAULT_SOURCES,
 
     # ── external config directory ───────────────────────────────────────────
     config_dir: Annotated[
@@ -207,11 +185,11 @@ def main(
     ] = False,
 ) -> None:
     """
-    Fetch active [bold cyan]Generative AI & ML[/bold cyan] job postings from 34 target companies.
+    Fetch active [bold cyan]Generative AI, Agentic AI, LLM & RAG[/bold cyan] job postings from 34 target companies.
 
-    By default queries [bold]all 34 companies[/bold] with [bold]all engines[/bold] in [bold]India[/bold]
-    for jobs posted in the [bold]last 7 days[/bold], strictly filtered for candidates with < 4 years
-    experience, then prints a table and saves reports to the current directory.
+    By default queries [bold]all 34 companies[/bold] with [bold]all career-portal engines[/bold]
+    in [bold]India[/bold] for jobs posted in the [bold]last 7 days[/bold], strictly filtered for
+    < 4 years experience, and prints matching jobs with their URLs directly in the terminal.
     """
     _configure_logging(verbose)
 
@@ -230,26 +208,13 @@ def main(
         raise typer.Exit()
 
     # ── Validate --sources ────────────────────────────────────────────────────
-    valid_sources = {"jobspy", "dork", "ats", "all"}
+    valid_sources = {"ats", "dork", "all"}
     if sources not in valid_sources:
         console.print(
-            f"[bold red]Error:[/bold red] --sources must be one of {valid_sources}. "
-            f"Got: {sources!r}"
+            f"[bold red]Error:[/bold red] --sources must be one of {sorted(valid_sources)} "
+            f"(only company career portals are enabled). Got: {sources!r}"
         )
         raise typer.Exit(code=1)
-
-    # ── Validate --export ─────────────────────────────────────────────────────
-    valid_formats = {"csv", "json", "md"}
-    requested_formats: list[str] = []
-    if export_format:
-        bad_formats = [f for f in export_format if f.lower() not in valid_formats]
-        if bad_formats:
-            console.print(
-                f"[bold red]Error:[/bold red] Unknown export format(s): {bad_formats}. "
-                f"Valid: {valid_formats}"
-            )
-            raise typer.Exit(code=1)
-        requested_formats = [f.lower() for f in export_format]
 
     # ── Resolve company names ─────────────────────────────────────────────────
     target_companies: list[str]
@@ -274,8 +239,6 @@ def main(
             days=days,
             max_results=max_results,
             sources=sources,
-            export_formats=requested_formats,
-            output_dir=output_dir.expanduser().resolve(),
             experience=experience,
             strict_experience=strict_mode,
         )

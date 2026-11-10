@@ -1,26 +1,24 @@
 """
 genai_jobs/pipeline.py
 ─────────────────────────────────────────────────────────────────────────────
-Orchestrator that coordinates all four engines concurrently under a unified
-Rich progress display.
+Orchestrator that coordinates the company career-portal engines concurrently
+under a unified Rich progress display.
 
 Responsibilities
 ────────────────
-1. Decide which engines to invoke (amazon-api / ats / jobspy / dork).
+1. Decide which career-portal engines to invoke (amazon-api / ats / dork).
 2. Run enabled engines in parallel via ThreadPoolExecutor so wall-clock latency
    equals the slowest active engine rather than their sum.
 3. Merge, deduplicate, enforce strict India + <4 yr experience + 7-day rules,
    and sort the final result list.
-4. Drive the Rich live progress display and export Markdown / CSV / JSON reports.
+4. Render the Rich progress display and terminal results table with job URLs.
 """
 from __future__ import annotations
 
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
-from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 
 from rich.console import Console
 from rich.panel import Panel
@@ -33,25 +31,17 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
+from rich.table import Table
+from rich.text import Text
 
-from genai_jobs.config import get_config
-from genai_jobs.constants import (
-    CANONICAL_COMPANIES,
-    DEFAULT_DAYS,
-    DEFAULT_MAX_RESULTS,
-)
-from genai_jobs.engines.amazon_api import _AMAZON_SEARCH_TERMS, fetch_amazon_jobs
+from genai_jobs.engines.amazon_api import fetch_amazon_jobs, get_amazon_search_terms
 from genai_jobs.engines.ats_engine import fetch_via_ats_apis, get_supported_ats_companies
 from genai_jobs.engines.dork_engine import fetch_via_dork
-from genai_jobs.engines.jobspy_engine import fetch_via_jobspy
 from genai_jobs.models import JobPosting
-from genai_jobs.output.formatters import export, render_rich_table
 from genai_jobs.utils.filters import (
-    EXPERIENCE_UNKNOWN,
     infer_seniority_from_title,
     is_india_location,
     job_matches_experience,
-    matches_experience,
     parse_experience,
     parse_experience_filter,
 )
@@ -142,6 +132,65 @@ def _make_progress() -> Progress:
     )
 
 
+# ─── Terminal Output (Rich) ──────────────────────────────────────────────────
+
+def render_rich_table(jobs: list[JobPosting], title: str = "Gen-AI Job Postings") -> None:
+    """Render a Rich summary table followed by full clickable job URLs in the terminal."""
+    if not jobs:
+        console.print(
+            "\n[bold yellow]⚠  No matching Gen-AI jobs found.[/bold yellow]\n"
+            "Try widening filters: --days, --location, or --sources.\n"
+        )
+        return
+
+    table = Table(
+        title=f"[bold cyan]{title}[/bold cyan]",
+        show_header=True,
+        header_style="bold magenta",
+        border_style="bright_blue",
+        row_styles=["", "dim"],
+        expand=True,
+        show_lines=True,
+    )
+
+    table.add_column("#", style="bold white", width=3, justify="right", no_wrap=True)
+    table.add_column("Company", style="green", min_width=8, ratio=2, overflow="fold")
+    table.add_column("Job Title", style="bright_white", min_width=16, ratio=4, overflow="fold")
+    table.add_column("Location", style="yellow", min_width=10, ratio=2, overflow="fold")
+    table.add_column("Posted", style="cyan", width=10, no_wrap=True)
+    table.add_column("Exp", style="magenta", width=6, no_wrap=True)
+    table.add_column("Skills", style="bright_green", min_width=10, ratio=2, overflow="fold")
+    table.add_column("Source", style="blue", width=12, no_wrap=True)
+
+    for idx, job in enumerate(jobs, start=1):
+        title_link = Text(job.title, style=f"link {job.url}")
+        table.add_row(
+            str(idx),
+            job.company,
+            title_link,
+            job.location or "—",
+            job.date_str,
+            job.experience_label,
+            job.skills_label,
+            job.source,
+        )
+
+    console.print()
+    console.print(table)
+    console.print("[bold magenta]Job URLs:[/bold magenta]")
+    for idx, job in enumerate(jobs, start=1):
+        loc = f" · {job.location}" if job.location else ""
+        console.print(
+            f"  [bold white][{idx}][/bold white] [green]{job.company}[/green] — {job.title}[dim]{loc}[/dim]"
+        )
+        url_line = Text("      ") + Text(job.url, style=f"link {job.url} bold cyan underline")
+        console.print(url_line, soft_wrap=True)
+
+    console.print(
+        f"\n[bold green]✓ Total:[/bold green] [white]{len(jobs)} unique Gen-AI job(s) found.[/white]\n"
+    )
+
+
 # ─── Main pipeline ────────────────────────────────────────────────────────────
 
 def run_pipeline(
@@ -149,14 +198,12 @@ def run_pipeline(
     location: str,
     days: int,
     max_results: int,
-    sources: str,          # "jobspy" | "dork" | "ats" | "all"
-    export_formats: list[str],
-    output_dir: Path,
+    sources: str,          # "ats" | "dork" | "all"
     experience: str | int = "<4",
     strict_experience: bool = True,
 ) -> list[JobPosting]:
     """
-    Run the full Gen-AI job-fetch pipeline concurrently across active engines.
+    Run the Gen-AI career-portal job-fetch pipeline concurrently across active engines.
     """
     t_start = time.monotonic()
     all_jobs: list[JobPosting] = []
@@ -171,7 +218,7 @@ def run_pipeline(
             f"Sources: [yellow]{sources}[/yellow] · "
             f"Experience: [yellow]{exp_label}[/yellow]",
             border_style="bright_blue",
-            title="[bold]🤖 Gen-AI & Python Job Fetcher[/bold]",
+            title="[bold]🤖 Gen-AI Career Portal Job Fetcher[/bold]",
         )
     )
 
@@ -179,8 +226,6 @@ def run_pipeline(
     ats_supported = get_supported_ats_companies()
     ats_companies = [c for c in companies if c in ats_supported and c != "Amazon"] if sources in ("ats", "all") else []
     use_ats = bool(ats_companies)
-    spy_companies = [c for c in companies if not (use_amazon and c == "Amazon")] if sources in ("jobspy", "all") else []
-    use_jobspy = bool(spy_companies)
     use_dork = sources in ("dork", "all") and bool(companies)
 
     summary_lines: dict[str, str] = {}
@@ -190,22 +235,15 @@ def run_pipeline(
         engine_futures = []
 
         # Create all tasks upfront for clean stacked display
-        amz_task = progress.add_task("[cyan]Amazon JSON API[/cyan]", total=len(_AMAZON_SEARCH_TERMS)) if use_amazon else None
+        amz_terms = get_amazon_search_terms() if use_amazon else []
+        amz_task = progress.add_task("[cyan]Amazon JSON API[/cyan]", total=len(amz_terms)) if use_amazon else None
         ats_task = progress.add_task("[green]Direct ATS APIs[/green]", total=len(ats_companies)) if use_ats else None
-
-        spy_task = None
-        if use_jobspy:
-            sites = get_config().settings.jobspy_sites
-            tracks = (1 if any(s.lower() != "linkedin" for s in sites) else 0) + (1 if any(s.lower() == "linkedin" for s in sites) else 0)
-            spy_total = len(spy_companies) * max(1, tracks)
-            spy_task = progress.add_task("[magenta]JobSpy (Aggregators)[/magenta]", total=spy_total)
-
         dork_task = progress.add_task("[yellow]DDG ATS Dork[/yellow]", total=len(companies)) if use_dork else None
 
         # Thread-safe callbacks
         def _run_amazon() -> tuple[str, list[JobPosting]]:
             counter = {"n": 0}
-            amz_total = len(_AMAZON_SEARCH_TERMS)
+            amz_total = len(amz_terms)
 
             def _cb(company: str, term: str) -> None:
                 with lock:
@@ -240,24 +278,6 @@ def run_pipeline(
                 progress.update(ats_task, completed=len(ats_companies))
             return ("ats", jobs)
 
-        def _run_jobspy() -> tuple[str, list[JobPosting]]:
-            visited: set[str] = set()
-
-            def _cb(step_key: str, term: str) -> None:
-                co_display = step_key.split(":", 1)[0]
-                with lock:
-                    if step_key not in visited:
-                        visited.add(step_key)
-                        progress.advance(spy_task)
-                    progress.update(spy_task, description=f"[magenta]JobSpy[/magenta] ▶ {co_display[:18]} · {term[:22]}")
-
-            jobs = fetch_via_jobspy(
-                companies=spy_companies, location=location, days=days, max_results=max_results, progress_callback=_cb
-            )
-            with lock:
-                progress.update(spy_task, completed=progress.tasks[spy_task].total)
-            return ("jobspy", jobs)
-
         def _run_dork() -> tuple[str, list[JobPosting]]:
             visited: set[str] = set()
 
@@ -275,13 +295,11 @@ def run_pipeline(
                 progress.update(dork_task, completed=len(companies))
             return ("dork", jobs)
 
-        with ThreadPoolExecutor(max_workers=4) as pool:
+        with ThreadPoolExecutor(max_workers=3) as pool:
             if use_amazon:
                 engine_futures.append(("amazon", pool.submit(_run_amazon)))
             if use_ats:
                 engine_futures.append(("ats", pool.submit(_run_ats)))
-            if use_jobspy:
-                engine_futures.append(("jobspy", pool.submit(_run_jobspy)))
             if use_dork:
                 engine_futures.append(("dork", pool.submit(_run_dork)))
 
@@ -293,8 +311,6 @@ def run_pipeline(
                         summary_lines["amazon"] = f"  [green]✓[/green] Amazon API → [bold]{len(jobs)}[/bold] job(s)"
                     elif eng_name == "ats":
                         summary_lines["ats"] = f"  [green]✓[/green] Direct ATS APIs ({len(ats_companies)} portals) → [bold]{len(jobs)}[/bold] job(s)"
-                    elif eng_name == "jobspy":
-                        summary_lines["jobspy"] = f"  [green]✓[/green] JobSpy Aggregators → [bold]{len(jobs)}[/bold] job(s)"
                     elif eng_name == "dork":
                         summary_lines["dork"] = f"  [green]✓[/green] DDG ATS Dork → [bold]{len(jobs)}[/bold] job(s)"
                 except Exception as exc:
@@ -302,7 +318,7 @@ def run_pipeline(
                     summary_lines[eng_name] = f"  [red]✗[/red] {eng_name} → failed ({exc})"
 
     # Print clean per-engine summary lines after Rich progress exits
-    for key in ("amazon", "ats", "jobspy", "dork"):
+    for key in ("amazon", "ats", "dork"):
         if key in summary_lines:
             console.print(summary_lines[key])
 
@@ -336,35 +352,11 @@ def run_pipeline(
     else:
         console.print(f"  [dim]Completed in {elapsed:.1f}s[/dim]")
 
-    # ── Render terminal table ─────────────────────────────────────────────────
+    # ── Render terminal output ────────────────────────────────────────────────
     exp_tag = f" · Exp {exp_active_label}" if exp_active_label != "any" else ""
     render_rich_table(
         final_jobs,
         title=f"Gen-AI Jobs — {location} — last {days} days{exp_tag}",
     )
-
-    # ── Auto-save reports ─────────────────────────────────────────────────────
-    auto_formats = set(["csv", "md", "json"]) | set(export_formats)
-    run_meta = {
-        "location": location,
-        "days": days,
-        "companies": ", ".join(companies),
-        "sources": sources,
-        "max_results_per_company": "all" if not max_results or max_results <= 0 else max_results,
-        "experience_filter": exp_active_label,
-        "strict_experience": strict_experience,
-    }
-    output_paths = export(
-        jobs=final_jobs,
-        formats=list(auto_formats),
-        directory=output_dir,
-        run_meta=run_meta,
-    )
-
-    if output_paths:
-        console.print("[bold]📂 Saved reports:[/bold]")
-        for fmt, path in output_paths.items():
-            console.print(f"  [cyan]{fmt.upper()}[/cyan] → {path}")
-    console.print()
 
     return final_jobs

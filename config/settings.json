@@ -4,18 +4,5 @@
   "strict_experience": true,
   "default_location": "India",
   "default_max_results": 0,
-  "default_sources": "all",
-  "jobspy_sites": [
-    "indeed",
-    "naukri",
-    "linkedin"
-  ],
-  "inter_request_delay": 0.4,
-  "proxies": [],
-  "request_timeout_seconds": 30,
-  "max_retry_attempts": 3,
-  "retry_wait_min": 2.0,
-  "retry_wait_max": 10.0,
-  "amazon_api_url": "https://www.amazon.jobs/en/search.json"
+  "default_sources": "all"
 }
-

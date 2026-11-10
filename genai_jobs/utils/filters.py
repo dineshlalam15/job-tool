@@ -13,11 +13,9 @@ from typing import Optional
 from genai_jobs.config import (
     get_alias_to_canonical,
     get_canonical_companies,
-    get_company_aliases,
     get_company_ats_domains,
+    get_match_keywords,
     get_skills_detection_map,
-    get_tier1_keywords,
-    get_tier2_keywords,
 )
 
 
@@ -47,18 +45,6 @@ def resolve_company(raw_name: str) -> Optional[str]:
         if re.search(pattern, normalised):
             return alias_map[alias]
     return None
-
-
-def is_target_company(raw_name: str, allowed: Optional[list[str]] = None) -> bool:
-    """
-    Return True when raw_name resolves to one of the configured target companies
-    (or to a specific subset if ``allowed`` is provided).
-    """
-    canonical = resolve_company(raw_name)
-    if canonical is None:
-        return False
-    targets = allowed if allowed else get_canonical_companies()
-    return canonical in targets
 
 
 # ─── Gen-AI Keyword Matching ─────────────────────────────────────────────────
@@ -115,48 +101,61 @@ def _has_keyword(kw: str, text: str) -> bool:
 
 def matches_genai(title: str, description: str = "") -> bool:
     """
-    Return True when the job is in the Gen-AI / targeted skillset domain.
-    Dynamically adheres to keywords defined in config/skills.json.
+    Return True when the job matches the configured Gen-AI terms
+    (Generative AI / GenAI, Agentic AI, LLM, RAG) defined in config/skills.json.
     """
     if _NON_TECH_TITLE_PATTERNS.search(title):
         return False
 
     clean_desc = _clean_description_for_matching(description)
-    tier1 = get_tier1_keywords()
-    tier2 = get_tier2_keywords()
-
-    # Tier-1 hit in title or cleaned description with word boundary enforcement
-    for kw in tier1:
+    for kw in get_match_keywords():
         if _has_keyword(kw, title) or _has_keyword(kw, clean_desc):
             return True
-
-    # Tier-2 (e.g. Python Developer / Engineer) in title + Tier-1 in cleaned description
-    tier2_in_title = any(_has_keyword(kw, title) for kw in tier2)
-    if tier2_in_title:
-        for kw in tier1:
-            if _has_keyword(kw, clean_desc):
-                return True
 
     return False
 
 
 # ─── URL-based Company Inference ─────────────────────────────────────────────
 
+_SHARED_ATS_HOSTS = {
+    "jobs.lever.co",
+    "boards.greenhouse.io",
+    "job-boards.greenhouse.io",
+    "jobs.ashbyhq.com",
+    "smartrecruiters.com",
+    "wd1.myworkdaysite.com",
+    "apply.workable.com",
+}
+
+
 def company_from_url(url: str) -> Optional[str]:
     """
     Infer canonical company name from career/ATS URL using domains from
-    config/companies.json.
+    config/companies.json. Matches full domain+path entries longest-first so
+    shared ATS hosts (e.g. jobs.lever.co/jodo) resolve to the exact company.
     """
     if not url:
         return None
     url_lower = url.lower()
     ats_map = get_company_ats_domains()
 
+    candidates: list[tuple[str, str]] = []
     for canonical, domains in ats_map.items():
         for d in domains:
-            domain_root = d.split("/")[0].lower().strip()
-            if domain_root and domain_root in url_lower:
-                return canonical
+            clean_d = d.lower().strip().rstrip("/")
+            if clean_d:
+                candidates.append((clean_d, canonical))
+
+    # 1. Longest/most-specific configured domain(+path) match first
+    for clean_d, canonical in sorted(candidates, key=lambda item: len(item[0]), reverse=True):
+        if clean_d in url_lower:
+            return canonical
+
+    # 2. Host-only fallback only for dedicated company-owned domains
+    for clean_d, canonical in candidates:
+        domain_root = clean_d.split("/")[0]
+        if domain_root and domain_root not in _SHARED_ATS_HOSTS and domain_root in url_lower:
+            return canonical
 
     return None
 
@@ -542,52 +541,6 @@ def parse_experience(text: str, title: str = "") -> tuple[int, int]:
                 parsed_hi = EXPERIENCE_UNKNOWN
 
     return (parsed_lo, parsed_hi)
-
-
-def matches_experience(
-    title: str,
-    description: str,
-    max_exp: int,
-) -> bool:
-    """
-    Return True when the job's stated experience **requirement** is at most
-    ``max_exp`` years — i.e., the posting is reachable for someone with up to
-    that many years of experience.
-
-    Semantics (from the job's perspective)
-    ───────────────────────────────────────
-    The user passes ``-x N`` meaning "show me roles that require ≤ N years."
-
-    | Job says              | Parsed as     | Keep when cap=N?           |
-    |-----------------------|---------------|----------------------------|
-    | "2–4 years"           | (min=2, max=4)| max(4) ≤ N                 |
-    | "less than 4 years"   | (min=0, max=3)| max(3) ≤ N                 |
-    | "up to 2 years"       | (min=0, max=2)| max(2) ≤ N                 |
-    | "5 years experience"  | (min=5, max=5)| 5 ≤ N                      |
-    | "3+ years"            | (min=3, max=-1)| min(3) ≤ N (open ceiling) |
-    | "fresher"             | (min=0, max=0)| always keep               |
-    | (not found)           | (-1, -1)      | always keep               |
-
-    Parameters
-    ----------
-    title       : job title string
-    description : job description / snippet string
-    max_exp     : maximum years of experience the job should require (inclusive)
-    """
-    for text in (title, description):
-        min_yrs, max_yrs = parse_experience(text, title=title)
-        if min_yrs == EXPERIENCE_UNKNOWN and max_yrs == EXPERIENCE_UNKNOWN:
-            continue   # nothing found in this text, try next
-
-        if max_yrs != EXPERIENCE_UNKNOWN:
-            # We know the job's ceiling — keep only if ceiling ≤ user cap
-            return max_yrs <= max_exp
-
-        # Only min_yrs known (open-ended "X+") — keep if floor ≤ user cap
-        return min_yrs <= max_exp
-
-    # No experience data anywhere → let the job through
-    return True
 
 
 # ─── Experience Range & Expression Filter ────────────────────────────────────
