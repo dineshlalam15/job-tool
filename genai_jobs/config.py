@@ -64,11 +64,15 @@ class AppConfig(BaseModel):
 
 def discover_config_dir(explicit_dir: Optional[str | Path] = None) -> Path:
     """
-    Find the configuration directory in order of priority:
-      1. Explicit path parameter (--config-dir flag)
-      2. GENAI_JOBS_CONFIG_DIR environment variable
-      3. Current working directory ./config
-      4. Job tool root directory / config
+    Resolve the directory containing external JSON configuration files in priority order:
+    explicit path -> ``GENAI_JOBS_CONFIG_DIR`` env var -> ``./config`` -> repo ``config/``.
+
+    Args:
+        explicit_dir (Optional[str | Path]): Optional custom directory path supplied via CLI.
+
+    Returns:
+        Path: First existing directory containing ``companies.json``, or the highest-priority
+            fallback path if none exists yet.
     """
     candidates: list[Path] = []
 
@@ -98,6 +102,16 @@ def discover_config_dir(explicit_dir: Optional[str | Path] = None) -> Path:
 # ─── Safe Loaders ────────────────────────────────────────────────────────────
 
 def _load_json_file(file_path: Path) -> dict[str, Any]:
+    """
+    Safely read and deserialize a JSON configuration file from disk, returning an
+    empty dictionary instead of raising if the file is missing or malformed.
+
+    Args:
+        file_path (Path): Filesystem path to the target JSON file.
+
+    Returns:
+        dict[str, Any]: Parsed JSON object, or ``{}`` when missing or invalid.
+    """
     if not file_path.is_file():
         logger.warning("Config file not found: %s", file_path)
         return {}
@@ -116,7 +130,16 @@ _ACTIVE_CONFIG: Optional[AppConfig] = None
 
 def load_config(config_dir: Optional[str | Path] = None, reload: bool = False) -> AppConfig:
     """
-    Load or reload the active configuration from the config directory.
+    Load ``companies.json``, ``skills.json``, and ``settings.json`` into the singleton
+    ``AppConfig`` model, returning the cached instance unless ``reload`` or a custom
+    ``config_dir`` is provided.
+
+    Args:
+        config_dir (Optional[str | Path]): Optional directory overriding default discovery.
+        reload (bool): When True, forces re-reading JSON files even if already cached.
+
+    Returns:
+        AppConfig: Active validated configuration instance.
     """
     global _ACTIVE_CONFIG
     if _ACTIVE_CONFIG is not None and not reload and config_dir is None:
@@ -147,7 +170,16 @@ def load_config(config_dir: Optional[str | Path] = None, reload: bool = False) -
 
 
 def get_config() -> AppConfig:
-    """Get the currently loaded configuration (loads defaults if not yet initialized)."""
+    """
+    Return the active ``AppConfig`` singleton, loading default configuration files
+    on first access if it has not been initialized yet.
+
+    Args:
+        None.
+
+    Returns:
+        AppConfig: Currently active configuration object.
+    """
     global _ACTIVE_CONFIG
     if _ACTIVE_CONFIG is None:
         return load_config()
@@ -157,11 +189,30 @@ def get_config() -> AppConfig:
 # ─── Dynamic Accessors for Loose Coupling ────────────────────────────────────
 
 def get_canonical_companies() -> list[str]:
+    """
+    Extract the ordered list of canonical company names from active configuration.
+
+    Args:
+        None.
+
+    Returns:
+        list[str]: Canonical company names configured in ``companies.json``.
+    """
     cfg = get_config()
     return [c.name for c in cfg.companies.companies]
 
 
 def get_company_aliases() -> dict[str, set[str]]:
+    """
+    Build a mapping from each canonical company name to its lowercase aliases
+    (including the canonical name itself).
+
+    Args:
+        None.
+
+    Returns:
+        dict[str, set[str]]: Map of canonical company name to normalized alias strings.
+    """
     cfg = get_config()
     result: dict[str, set[str]] = {}
     for c in cfg.companies.companies:
@@ -172,6 +223,16 @@ def get_company_aliases() -> dict[str, set[str]]:
 
 
 def get_alias_to_canonical() -> dict[str, str]:
+    """
+    Invert the company-aliases map for O(1) lookup from any lowercase alias
+    or name to its canonical company name.
+
+    Args:
+        None.
+
+    Returns:
+        dict[str, str]: Reverse map of ``{lowercase_alias: canonical_company_name}``.
+    """
     aliases = get_company_aliases()
     return {
         alias: canonical
@@ -181,11 +242,30 @@ def get_alias_to_canonical() -> dict[str, str]:
 
 
 def get_company_ats_domains() -> dict[str, list[str]]:
+    """
+    Return configured official career portal / ATS domains per canonical company.
+
+    Args:
+        None.
+
+    Returns:
+        dict[str, list[str]]: Map of canonical company name to list of ATS domains/paths.
+    """
     cfg = get_config()
     return {c.name: c.ats_domains for c in cfg.companies.companies}
 
 
 def get_search_terms() -> list[str]:
+    """
+    Return active search query terms loaded from ``skills.json``, falling back to
+    ``["Generative AI", "Agentic AI", "LLM", "RAG"]`` if empty.
+
+    Args:
+        None.
+
+    Returns:
+        list[str]: Search query strings used across all fetching engines.
+    """
     cfg = get_config()
     return cfg.skills.search_terms or [
         "Generative AI",
@@ -196,12 +276,30 @@ def get_search_terms() -> list[str]:
 
 
 def get_skills_detection_map() -> dict[str, list[str]]:
+    """
+    Return the mapping of canonical skill labels to their detection keyword variants.
+
+    Args:
+        None.
+
+    Returns:
+        dict[str, list[str]]: Map of ``{skill_label: [keyword_variants]}``.
+    """
     cfg = get_config()
     return cfg.skills.skills_detection
 
 
 def get_match_keywords() -> list[str]:
-    """Return deduplicated lowercase keywords derived from skills_detection and search_terms."""
+    """
+    Build a deduplicated list of lowercase matching keywords combined from
+    ``skills_detection`` and ``search_terms``, with built-in GenAI/Agentic/LLM/RAG fallback.
+
+    Args:
+        None.
+
+    Returns:
+        list[str]: Deduplicated lowercase keyword strings used by ``matches_genai()``.
+    """
     seen: set[str] = set()
     keywords: list[str] = []
     for kws in get_skills_detection_map().values():

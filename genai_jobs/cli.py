@@ -51,6 +51,16 @@ console = Console()
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
 def _configure_logging(verbose: bool) -> None:
+    """
+    Configure root logging verbosity and suppress noisy third-party library logs.
+
+    Args:
+        verbose (bool): When True, sets root logging level to DEBUG; otherwise sets
+            WARNING and silences non-critical logs from ddgs, httpx, httpcore, and primp.
+
+    Returns:
+        None: Updates Python's global logging configuration in place.
+    """
     level = logging.DEBUG if verbose else logging.WARNING
     logging.basicConfig(
         level=level,
@@ -190,6 +200,21 @@ def main(
     By default queries [bold]all 34 companies[/bold] with [bold]all career-portal engines[/bold]
     in [bold]India[/bold] for jobs posted in the [bold]last 7 days[/bold], strictly filtered for
     < 4 years experience, and prints matching jobs with their URLs directly in the terminal.
+
+    Args:
+        company: Optional list of company names or aliases to filter by.
+        location: Target geographic location string (default: India).
+        days: Lookback window in days between 1 and 90 (default: 7).
+        max_results: Maximum jobs per company per engine, or 0 for unlimited (default: 0).
+        experience: Required experience filter expression such as '<4', '2-4', 'fresher', or 'all'.
+        strict_exp: Optional override for strict experience verification mode.
+        sources: Engine selector ('ats', 'dork', or 'all').
+        config_dir: Optional custom directory containing companies, skills, and settings JSON files.
+        list_companies: When True, prints all configured company names and exits.
+        verbose: When True, enables DEBUG logging output.
+
+    Returns:
+        None: Exits after printing the configured company list or terminal job results.
     """
     _configure_logging(verbose)
 

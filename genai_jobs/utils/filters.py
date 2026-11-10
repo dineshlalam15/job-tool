@@ -23,10 +23,15 @@ from genai_jobs.config import (
 
 def resolve_company(raw_name: str) -> Optional[str]:
     """
-    Map a raw company name string (from any scraper) to one of the canonical
-    names loaded from config/companies.json. Returns None if no match is found.
-    Uses exact lookup first, then word-boundary matching (len >= 3) so short
-    acronyms or substrings like 'EY' in 'Honeywell' or 'gs' in 'GSPANN' never collide.
+    Resolve a raw company name or shorthand alias into its canonical company name
+    from ``config/companies.json``, using exact matching first and longest-first
+    word-boundary regex matching (>= 3 chars) to prevent short-acronym collisions.
+
+    Args:
+        raw_name (str): Raw company name or alias string supplied by CLI or scraper.
+
+    Returns:
+        Optional[str]: Canonical company name if matched, or ``None`` otherwise.
     """
     if not raw_name:
         return None
@@ -78,7 +83,17 @@ _CORPORATE_BOILERPLATE_PATTERNS = [
 
 
 def _clean_description_for_matching(description: str) -> str:
-    """Strip universal corporate PR banners and recruiting disclaimers before keyword matching."""
+    """
+    Remove universal corporate PR banners, agentic-branding taglines, and
+    automated HR recruiting disclaimers from job text prior to keyword matching.
+
+    Args:
+        description (str): Raw job description or qualification text.
+
+    Returns:
+        str: Sanitized text with configured corporate boilerplate phrases removed,
+            or ``""`` if ``description`` is empty.
+    """
     if not description:
         return ""
     cleaned = description
@@ -89,9 +104,16 @@ def _clean_description_for_matching(description: str) -> str:
 
 def _has_keyword(kw: str, text: str) -> bool:
     """
-    Check if a keyword appears in text using regex word boundaries.
-    Prevents short acronyms like 'rag', 'llm', 'ai' from matching substrings
-    in words like 'storage', 'leverage', 'coverage', 'garage', etc.
+    Test whether a keyword appears as a standalone token or phrase in ``text``
+    using case-insensitive regex word boundaries so acronyms like ``llm`` or ``rag``
+    never match substrings inside unrelated words.
+
+    Args:
+        kw (str): Keyword or phrase to search for.
+        text (str): Target text (job title or cleaned description).
+
+    Returns:
+        bool: True if ``kw`` occurs on word boundaries in ``text``, else False.
     """
     if not kw or not text:
         return False
@@ -101,8 +123,17 @@ def _has_keyword(kw: str, text: str) -> bool:
 
 def matches_genai(title: str, description: str = "") -> bool:
     """
-    Return True when the job matches the configured Gen-AI terms
-    (Generative AI / GenAI, Agentic AI, LLM, RAG) defined in config/skills.json.
+    Determine whether a job posting matches the configured Gen-AI terms
+    (Generative AI / GenAI, Agentic AI, LLM, RAG) while rejecting non-technical
+    or pure hardware roles based on title exclusion patterns.
+
+    Args:
+        title (str): Job posting title.
+        description (str): Optional job description or snippet text.
+
+    Returns:
+        bool: True when the role is technical and matches at least one configured
+            Gen-AI keyword in either ``title`` or sanitized ``description``.
     """
     if _NON_TECH_TITLE_PATTERNS.search(title):
         return False
@@ -130,9 +161,15 @@ _SHARED_ATS_HOSTS = {
 
 def company_from_url(url: str) -> Optional[str]:
     """
-    Infer canonical company name from career/ATS URL using domains from
-    config/companies.json. Matches full domain+path entries longest-first so
-    shared ATS hosts (e.g. jobs.lever.co/jodo) resolve to the exact company.
+    Infer a canonical company name from a career or ATS posting URL by matching
+    full configured ``domain/path`` strings longest-first, falling back to
+    host-only matching strictly for non-shared company-owned career domains.
+
+    Args:
+        url (str): Full career portal or ATS job URL.
+
+    Returns:
+        Optional[str]: Canonical company name if matched, or ``None`` otherwise.
     """
     if not url:
         return None
@@ -235,8 +272,15 @@ _CITY_DISPLAY_NAMES = {
 
 def extract_india_location(text: str) -> Optional[str]:
     """
-    Extract a normalized India location name (e.g. 'Bengaluru, India')
-    from text snippets, location fields, titles, or URLs.
+    Extract and normalize an Indian city/hub display label (for example mapping
+    ``"Bangalore"`` to ``"Bengaluru, India"``) or generic ``"India"`` from free text.
+
+    Args:
+        text (str): Combined job location, title, snippet, or URL text.
+
+    Returns:
+        Optional[str]: Standardized ``"<City>, India"`` or ``"India"`` string if
+            an Indian location indicator is present, else ``None``.
     """
     if not text:
         return None
@@ -251,9 +295,16 @@ def extract_india_location(text: str) -> Optional[str]:
 
 def is_india_location(location_str: str, text: str = "") -> bool:
     """
-    Strictly verify whether a job's location or context is within India.
-    Accepts any city, state, or pan-India remote location, while strictly
-    rejecting international locations (USA, UK, Singapore, Europe, etc.).
+    Verify strictly whether a job posting is located in India by checking both
+    explicit Indian cities/states/country markers and rejecting postings anchored
+    in foreign cities/countries without an India match.
+
+    Args:
+        location_str (str): Structured location field from the portal or scraper.
+        text (str): Optional supplementary text (title, description snippet, URL).
+
+    Returns:
+        bool: True when confirmed to be an India role, False if foreign or unverified.
     """
     if not location_str and not text:
         return False
@@ -303,7 +354,17 @@ def is_india_location(location_str: str, text: str = "") -> bool:
 # ─── Misc helpers ─────────────────────────────────────────────────────────────
 
 def truncate(text: str, max_chars: int = 300) -> str:
-    """Return at most `max_chars` characters with an ellipsis if trimmed."""
+    """
+    Trim whitespace from ``text`` and shorten it to at most ``max_chars``
+    characters, appending ``"…"`` when truncated.
+
+    Args:
+        text (str): Input text string to shorten.
+        max_chars (int): Maximum number of base characters to retain (default: 300).
+
+    Returns:
+        str: Trimmed (and optionally ellipsized) string, or ``""`` when empty.
+    """
     if not text:
         return ""
     text = text.strip()
@@ -312,8 +373,17 @@ def truncate(text: str, max_chars: int = 300) -> str:
 
 def validate_company_names(names: list[str]) -> list[str]:
     """
-    Validate a list of company names supplied via CLI against the canonical list.
-    Returns the matched canonical names; raises ValueError listing bad inputs.
+    Resolve and validate CLI-provided company names/aliases against configured
+    target companies, deduplicating resolved canonical names while preserving order.
+
+    Args:
+        names (list[str]): Raw company names or aliases supplied via CLI options.
+
+    Returns:
+        list[str]: Ordered deduplicated list of canonical company names.
+
+    Raises:
+        ValueError: If one or more inputs cannot be resolved to a valid company.
     """
     resolved: list[str] = []
     bad: list[str] = []
@@ -414,9 +484,16 @@ _EXP_PATTERNS: list[tuple[re.Pattern, str]] = [
 
 def infer_seniority_from_title(title: str) -> tuple[int, int]:
     """
-    Infer experience bounds from explicit seniority keywords in the job title.
-    Enforces realistic minimums for Senior/Lead/Manager/Principal/Specialist/Advanced roles,
-    and maps mid-level tiers (e.g. SDE II, Engineer II) to 2-4 years.
+    Infer minimum and maximum required experience bounds solely from seniority
+    or career-level markers inside a job title (e.g., Intern -> 0–2 yr,
+    Associate/Junior -> 0–2 yr, SDE II -> 2–4 yr, Senior/Lead -> 5+ yr, Principal -> 8+ yr).
+
+    Args:
+        title (str): Job title string.
+
+    Returns:
+        tuple[int, int]: Tuple ``(min_years, max_years)`` where ``-1`` denotes
+            an open-ended ceiling or ``(EXPERIENCE_UNKNOWN, EXPERIENCE_UNKNOWN)`` if unstated.
     """
     if not title:
         return (EXPERIENCE_UNKNOWN, EXPERIENCE_UNKNOWN)
@@ -485,16 +562,17 @@ def infer_seniority_from_title(title: str) -> tuple[int, int]:
 
 def parse_experience(text: str, title: str = "") -> tuple[int, int]:
     """
-    Parse the experience requirement from a job description or text, cross-referencing
-    the job title to prevent senior titles from masquerading as entry-level.
+    Extract required years of experience from job description text using ordered
+    regex rules, taking the highest overall qualification floor and correlating it
+    against title seniority via ``infer_seniority_from_title()``.
 
-    Scans for all stated experience requirements and determines the overall role
-    requirement (e.g. if a role requires '11-15 years total' and '2+ years in Python',
-    the role's true qualification floor is 11-15 years).
+    Args:
+        text (str): Job description or qualifications text to scan.
+        title (str): Optional job title used to enforce seniority floors.
 
-    Returns
-    -------
-    (min_years, max_years)
+    Returns:
+        tuple[int, int]: Normalized ``(min_years, max_years)`` bounds, where ``-1``
+            indicates an open-ended ceiling or unknown value.
     """
     if not text and not title:
         return (EXPERIENCE_UNKNOWN, EXPERIENCE_UNKNOWN)
@@ -547,14 +625,15 @@ def parse_experience(text: str, title: str = "") -> tuple[int, int]:
 
 def parse_experience_filter(filter_val: str | int) -> tuple[int, int]:
     """
-    Parse an experience filter expression into (target_lo, target_hi).
+    Parse a user-supplied CLI experience filter expression (such as ``"<4"``,
+    ``"2-4"``, ``"4"``, ``"fresher"``, or ``"all"``) into numeric target bounds.
 
-    Supported formats:
-      - "4" or 4           -> (0, 4)   (<= 4 years / freshers to 4 years)
-      - "2-4" or "2 to 4"  -> (2, 4)   (roles between 2 and 4 years)
-      - "<4" or "under 4"  -> (0, 3)   (strictly less than 4 years)
-      - "fresher" / "0"    -> (0, 0)
-      - "all" / "0" / None -> (-1, -1) (disabled)
+    Args:
+        filter_val (str | int): Experience expression string or integer cap.
+
+    Returns:
+        tuple[int, int]: Inclusive target bounds ``(target_lo, target_hi)``, or
+            ``(-1, -1)`` when the experience filter is disabled.
     """
     if not filter_val:
         return (-1, -1)
@@ -594,11 +673,19 @@ def job_matches_experience(
     strict_mode: bool = False,
 ) -> bool:
     """
-    Check whether a job with bounds (job_lo, job_hi) satisfies target (target_lo, target_hi).
+    Evaluate whether a job posting's parsed experience bounds ``(job_lo, job_hi)``
+    are compatible with the target filter range ``(target_lo, target_hi)``.
 
-    In strict_mode:
-      Jobs with unstated/unverified experience (job_lo == -1 and job_hi == -1) are REJECTED,
-      guaranteeing that 100% of returned jobs have confirmed experience matching the criteria.
+    Args:
+        job_lo (int): Minimum required years for the job (``-1`` if unstated).
+        job_hi (int): Maximum required years for the job (``-1`` if open-ended/unstated).
+        target_lo (int): Lower bound of user experience filter (``-1`` disables filter).
+        target_hi (int): Upper bound of user experience filter (``-1`` if unbounded).
+        strict_mode (bool): When True, rejects jobs with both ``job_lo == -1`` and
+            ``job_hi == -1``.
+
+    Returns:
+        bool: True if the posting satisfies the experience criteria, else False.
     """
     if target_lo == -1 and target_hi == -1:
         return True  # filter disabled
@@ -639,8 +726,16 @@ def job_matches_experience(
 
 def detect_skills(title: str, description: str = "") -> list[str]:
     """
-    Extract skillset tags dynamically from external configuration in config/skills.json.
-    Uses regex word boundaries so short tags like 'RAG' never match inside 'storage'.
+    Detect matching skill tags configured in ``config/skills.json`` from the
+    combined job title and boilerplate-cleaned description using word-boundary regex.
+
+    Args:
+        title (str): Job posting title.
+        description (str): Optional job description text.
+
+    Returns:
+        list[str]: Matched canonical skill names (e.g. ``["Generative AI", "LLM"]``),
+            defaulting to ``["GenAI"]`` if no specific tag matches.
     """
     text = f"{title} {_clean_description_for_matching(description)}"
     skills_map = get_skills_detection_map()

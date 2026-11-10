@@ -52,12 +52,30 @@ _DEFAULT_ATS_SEARCH_TERMS = ["Generative AI", "Agentic AI", "LLM", "RAG"]
 
 
 def _get_ats_search_terms() -> list[str]:
-    """Return configured search terms (defaults to Generative AI, Agentic AI, LLM, RAG)."""
+    """
+    Retrieve search query terms for direct career-portal APIs from external
+    configuration, falling back to ``["Generative AI", "Agentic AI", "LLM", "RAG"]``.
+
+    Args:
+        None.
+
+    Returns:
+        list[str]: Active search query terms.
+    """
     return get_search_terms() or list(_DEFAULT_ATS_SEARCH_TERMS)
 
 
 def _strip_html(raw: str) -> str:
-    """Convert HTML snippet to clean plain text."""
+    """
+    Decode HTML entities, strip HTML tags, and collapse whitespace into a single
+    plain-text string.
+
+    Args:
+        raw (str): Raw HTML or HTML-escaped string.
+
+    Returns:
+        str: Normalized plain text, or ``""`` when input is empty.
+    """
     if not raw:
         return ""
     unescaped = html.unescape(raw)
@@ -67,9 +85,14 @@ def _strip_html(raw: str) -> str:
 
 def _parse_relative_date(raw: str) -> Optional[date]:
     """
-    Parse Workday / Oracle / Deloitte / Synopsys / GraphQL date strings:
-      'Posted Today', 'Posted Yesterday', 'Posted 3 Days Ago',
-      '2026-11-09', '2026-11-09T08:07:27.920Z', 'Nov 3, 2026', '11/06/2026'.
+    Parse relative or calendar date strings emitted by career portals (such as
+    ``"Posted Today"``, ``"Posted 3 Days Ago"``, ISO timestamps, or ``"Nov 3, 2026"``).
+
+    Args:
+        raw (str): Raw date text from a career portal response.
+
+    Returns:
+        Optional[date]: Parsed calendar ``date`` object, or ``None`` if unrecognized.
     """
     if not raw:
         return None
@@ -98,7 +121,16 @@ def _parse_relative_date(raw: str) -> Optional[date]:
 
 
 def _is_senior_title(title: str) -> bool:
-    """Return True when title explicitly indicates ≥ 4 years seniority."""
+    """
+    Quickly detect whether a job title explicitly indicates >= 4 years seniority
+    (e.g., Senior, Lead, Manager, Principal, Director) via ``infer_seniority_from_title()``.
+
+    Args:
+        title (str): Raw job posting title.
+
+    Returns:
+        bool: True when inferred minimum experience floor is >= 4 years, else False.
+    """
     if not title:
         return False
     t_lo, _ = infer_seniority_from_title(title)
@@ -112,7 +144,19 @@ def _fetch_google_careers(
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
-    """Fetch Google India GenAI roles directly from Google Careers."""
+    """
+    Fetch active Gen-AI job postings directly from Google Careers HTML search
+    pages by extracting embedded ``AF_initDataCallback`` JSON payloads and
+    filtering by seniority, location, date cutoff, and Gen-AI relevance.
+
+    Args:
+        location (str): Target search location string (default normalized to ``"India"``).
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching Google ``JobPosting`` records.
+    """
     queries = _get_ats_search_terms()
     loc_param = "India" if (not location or "india" in location.lower()) else location
     headers = get_stealth_headers("text/html,application/xhtml+xml")
@@ -278,7 +322,22 @@ def _fetch_workday_company(
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
-    """Query a company's Workday CXS JSON endpoint and hydrate candidate roles concurrently."""
+    """
+    Query a company's Workday CXS JSON endpoint across configured search terms,
+    pre-filter candidates by date, India location, and title seniority, then
+    concurrently fetch full descriptions to verify Gen-AI match and experience.
+
+    Args:
+        company (str): Canonical company name.
+        cfg (dict[str, str]): Workday configuration containing ``host``, ``tenant``,
+            ``site``, and optional ``url_prefix``.
+        location (str): Target location filter string.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching ``JobPosting`` records from the company's Workday portal.
+    """
     host = cfg["host"]
     tenant = cfg["tenant"]
     site = cfg["site"]
@@ -369,6 +428,17 @@ def _fetch_workday_company(
             return []
 
         def _hydrate(cand: dict) -> Optional[JobPosting]:
+            """
+            Fetch detailed job description and location for one Workday candidate
+            posting and construct a filtered ``JobPosting`` if valid.
+
+            Args:
+                cand (dict): Pre-filtered candidate metadata with ``title``,
+                    ``ext_path``, ``raw_loc``, and ``posted_on``.
+
+            Returns:
+                Optional[JobPosting]: Hydrated ``JobPosting`` or ``None`` if filtered out.
+            """
             detail_url = f"https://{host}/wday/cxs/{tenant}/{site}{cand['ext_path']}"
             full_text = ""
             final_loc = cand["raw_loc"]
@@ -446,7 +516,21 @@ def _fetch_oracle_company(
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
-    """Fetch India GenAI/Python jobs directly from Oracle Cloud HCM Recruiting API."""
+    """
+    Fetch Gen-AI job requisitions from an Oracle Cloud HCM Recruiting API
+    using configured search keywords, pre-filter candidate metadata, and
+    concurrently hydrate requisition details.
+
+    Args:
+        company (str): Canonical company name.
+        cfg (dict[str, str]): Oracle portal configuration with ``host`` and ``site``.
+        location (str): Target search location string.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching ``JobPosting`` objects from the Oracle HCM portal.
+    """
     host = cfg["host"]
     site = cfg["site"]
     base_api = f"https://{host}/hcmRestApi/resources/latest"
@@ -513,6 +597,17 @@ def _fetch_oracle_company(
             return []
 
         def _hydrate(cand: dict) -> Optional[JobPosting]:
+            """
+            Retrieve full qualifications and responsibilities for a single Oracle
+            HCM job requisition and convert it into a filtered ``JobPosting``.
+
+            Args:
+                cand (dict): Pre-filtered requisition dict containing ``id``,
+                    ``title``, ``location``, ``posted_on``, and ``short_desc``.
+
+            Returns:
+                Optional[JobPosting]: Normalized ``JobPosting`` if matched, else ``None``.
+            """
             detail_url = (
                 f"{base_api}/recruitingCEJobRequisitionDetails"
                 f"?onlyData=true&finder=ById;Id=%22{cand['id']}%22,siteNumber={site}"
@@ -575,7 +670,19 @@ def _fetch_goldman_sachs(
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
-    """Fetch India GenAI/AI/Python roles directly from Goldman Sachs Higher GraphQL API."""
+    """
+    Query Goldman Sachs' Higher GraphQL API (``GetRoles``) for early-career
+    and professional openings matching ``location``, then filter results by
+    seniority, recency cutoff, India verification, and Gen-AI keywords.
+
+    Args:
+        location (str): Target search location string.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching Goldman Sachs ``JobPosting`` objects.
+    """
     api_url = "https://api-higher.gs.com/gateway/api/v1/graphql"
     headers = get_stealth_headers("application/json", referer="https://higher.gs.com/")
     headers["Content-Type"] = "application/json"
@@ -715,7 +822,19 @@ def _fetch_deloitte_portal(
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
-    """Fetch India GenAI/AI roles directly from southasiacareers.deloitte.com."""
+    """
+    Search Deloitte South Asia's career portal across configured search terms,
+    parse HTML result rows, pre-filter by date, location, and title seniority,
+    and concurrently fetch individual job detail pages.
+
+    Args:
+        location (str): Target search location string.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching Deloitte ``JobPosting`` records.
+    """
     base_url = "https://southasiacareers.deloitte.com"
     headers = get_stealth_headers("text/html,application/xhtml+xml")
     is_india_target = not location or location.strip().lower() in ("india", "ind")
@@ -789,6 +908,17 @@ def _fetch_deloitte_portal(
             return []
 
         def _hydrate(cand: dict) -> Optional[JobPosting]:
+            """
+            Fetch a Deloitte job detail page, extract its description HTML, verify
+            Gen-AI keyword relevance, and return a normalized ``JobPosting``.
+
+            Args:
+                cand (dict): Pre-filtered candidate dict with ``title``, ``url``,
+                    ``location``, and ``posted_on``.
+
+            Returns:
+                Optional[JobPosting]: Hydrated ``JobPosting`` if valid, else ``None``.
+            """
             full_text = ""
             try:
                 dr = client.get(cand["url"])
@@ -837,7 +967,19 @@ def _fetch_synopsys_portal(
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
-    """Fetch India GenAI/AI roles directly from careers.synopsys.com."""
+    """
+    Query Synopsys' TalentBrew search endpoint across configured Gen-AI search
+    terms, parse job cards from HTML/JSON results, and concurrently hydrate
+    candidate detail pages to verify keywords and experience bounds.
+
+    Args:
+        location (str): Target search location string.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching Synopsys ``JobPosting`` records.
+    """
     base_url = "https://careers.synopsys.com"
     headers = get_stealth_headers("application/json, text/html")
     is_india_target = not location or location.strip().lower() in ("india", "ind")
@@ -912,6 +1054,17 @@ def _fetch_synopsys_portal(
             return []
 
         def _hydrate(cand: dict) -> Optional[JobPosting]:
+            """
+            Fetch a Synopsys job detail page, extract its ``ats-description`` HTML
+            block, verify Gen-AI keyword relevance, and build a ``JobPosting``.
+
+            Args:
+                cand (dict): Pre-filtered candidate dict with ``title``, ``url``,
+                    ``location``, and ``posted_on``.
+
+            Returns:
+                Optional[JobPosting]: Hydrated ``JobPosting`` if valid, else ``None``.
+            """
             full_text = ""
             try:
                 dr = client.get(cand["url"])
@@ -968,7 +1121,21 @@ def _fetch_phenom_company(
     cutoff_date: Optional[date],
     max_results: int,
 ) -> list[JobPosting]:
-    """Fetch India GenAI/AI jobs from Phenom People career portals via phApp.ddo."""
+    """
+    Fetch Gen-AI job openings from Phenom People-powered career portals (eBay, HPE)
+    by extracting server-rendered ``phApp.ddo`` JSON payloads and applying
+    seniority, location, date cutoff, and Gen-AI keyword filters.
+
+    Args:
+        company (str): Canonical company name.
+        base_url (str): Search-results base URL of the Phenom career portal.
+        location (str): Target search location string.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        max_results (int): Maximum jobs to return (<= 0 means unlimited).
+
+    Returns:
+        list[JobPosting]: Matching ``JobPosting`` records from the Phenom portal.
+    """
     headers = get_stealth_headers("text/html,application/xhtml+xml")
     is_india_target = not location or location.strip().lower() in ("india", "ind")
     seen_ids: set[str] = set()
@@ -1054,7 +1221,17 @@ def _fetch_phenom_company(
 # ─── Public Dispatcher ────────────────────────────────────────────────────────
 
 def get_supported_ats_companies() -> set[str]:
-    """Return all companies supported by direct ATS API adapters."""
+    """
+    Build the set of all canonical company names that have direct JSON, GraphQL,
+    or SSR career portal adapters implemented in this module.
+
+    Args:
+        None.
+
+    Returns:
+        set[str]: Supported canonical company names (Google, Goldman Sachs,
+            Deloitte, Synopsys, plus all Workday, Oracle, and Phenom portals).
+    """
     supported = {"Google", "Goldman Sachs", "Deloitte", "Synopsys"}
     supported.update(_WORKDAY_PORTALS.keys())
     supported.update(_ORACLE_PORTALS.keys())
@@ -1070,8 +1247,21 @@ def fetch_via_ats_apis(
     progress_callback=None,
 ) -> list[JobPosting]:
     """
-    Concurrently query official career portal JSON/GraphQL/SSR endpoints for
-    all supported companies present in ``companies``.
+    Concurrently execute all applicable direct ATS career-portal fetchers for
+    the requested companies, invoking ``progress_callback`` upon each portal
+    completion and returning deduplicated ``JobPosting`` records.
+
+    Args:
+        companies (list[str]): Canonical company names requested for fetching.
+        location (str): Target search location string (default: ``"India"``).
+        days (int): Recency cutoff window in days; 0 disables cutoff.
+        max_results (int): Maximum jobs kept per portal fetcher (<= 0 means unlimited).
+        progress_callback (Optional[Callable[[str, str], None]]): Optional callback
+            invoked as ``progress_callback(company, "direct-api")``.
+
+    Returns:
+        list[JobPosting]: Deduplicated list of matching ``JobPosting`` objects across
+            all executed direct career-portal adapters.
     """
     cutoff_date = (
         datetime.now().date() - timedelta(days=days)

@@ -50,8 +50,16 @@ def get_stealth_headers(
     referer: Optional[str] = None,
 ) -> dict[str, str]:
     """
-    Generate complete modern browser request headers including Client Hints
-    and Sec-Fetch directives to mimic genuine user navigation.
+    Build randomized modern desktop browser HTTP request headers including
+    Client Hints (``sec-ch-ua``) and ``Sec-Fetch-*`` metadata to avoid bot blocks.
+
+    Args:
+        accept_type (str): Value for the HTTP ``Accept`` header.
+        referer (Optional[str]): Optional referring URL; sets ``Referer`` and adjusts
+            ``Sec-Fetch-Site`` between ``same-origin`` and ``none``.
+
+    Returns:
+        dict[str, str]: Dictionary of HTTP header key-value pairs ready for httpx.
     """
     ua, sec_ch_ua, platform = random.choice(_REALISTIC_USER_AGENTS)
 
@@ -82,8 +90,15 @@ def get_stealth_headers(
 
 def apply_jitter_delay(base_seconds: float = 1.0, jitter_ratio: float = 0.5) -> None:
     """
-    Sleep for base_seconds ± randomized jitter to break deterministic request timing
-    which automated WAFs (Cloudflare, Akamai) use to flag bot crawlers.
+    Pause execution for a randomized duration centered around ``base_seconds``
+    (clamped to at least 0.2s) to prevent uniform automated request bursts.
+
+    Args:
+        base_seconds (float): Target average sleep time in seconds; values <= 0 skip sleeping.
+        jitter_ratio (float): Fractional variance applied symmetrically around ``base_seconds``.
+
+    Returns:
+        None: Blocks the calling thread for the chosen delay duration.
     """
     if base_seconds <= 0:
         return

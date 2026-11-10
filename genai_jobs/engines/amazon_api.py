@@ -59,7 +59,16 @@ _DEFAULT_AMAZON_SEARCH_TERMS = [
 
 
 def get_amazon_search_terms() -> list[str]:
-    """Return configured search terms (defaults to Generative AI, Agentic AI, LLM, RAG)."""
+    """
+    Retrieve search terms for Amazon Jobs queries from external configuration,
+    falling back to the default Gen-AI keyword list if unconfigured.
+
+    Args:
+        None.
+
+    Returns:
+        list[str]: Search query strings (e.g. ``["Generative AI", "Agentic AI", "LLM", "RAG"]``).
+    """
     return get_search_terms() or list(_DEFAULT_AMAZON_SEARCH_TERMS)
 
 
@@ -73,7 +82,18 @@ def get_amazon_search_terms() -> list[str]:
     reraise=False,
 )
 def _get_amazon_page(params: dict, client: Optional[httpx.Client] = None) -> Optional[dict]:
-    """Single HTTP GET to the Amazon Jobs JSON API with stealth headers and fail-fast timeout."""
+    """
+    Execute a single HTTP GET request against the Amazon Jobs JSON search API
+    with Tenacity retry handling, reusing ``client`` when provided or opening a
+    temporary stealth-header ``httpx.Client``.
+
+    Args:
+        params (dict): Query parameters for the ``search.json`` endpoint.
+        client (Optional[httpx.Client]): Optional shared HTTP client for connection reuse.
+
+    Returns:
+        Optional[dict]: Deserialized JSON response dictionary, or ``None`` if retries fail.
+    """
     if client is not None:
         resp = client.get(AMAZON_JOBS_API, params=params)
         resp.raise_for_status()
@@ -96,7 +116,16 @@ def _get_amazon_page(params: dict, client: Optional[httpx.Client] = None) -> Opt
 # ─── Parsers ──────────────────────────────────────────────────────────────────
 
 def _parse_date(raw: str) -> Optional[date]:
-    """Parse Amazon's posted-date string (e.g. 'November  6, 2026')."""
+    """
+    Parse Amazon's posted-date string (such as ``"November  6, 2026"`` or
+    ``"2026-11-06"``) after normalizing extra whitespace.
+
+    Args:
+        raw (str): Raw ``posted_date`` string returned by the Amazon API.
+
+    Returns:
+        Optional[date]: Parsed calendar ``date`` object, or ``None`` if parsing fails.
+    """
     cleaned = re.sub(r"\s+", " ", (raw or "").strip())
     for fmt in ("%B %d, %Y", "%Y-%m-%d", "%b %d, %Y"):
         try:
@@ -111,7 +140,20 @@ def _build_job(
     cutoff_date: Optional[date],
     target_location: str = "India",
 ) -> Optional[JobPosting]:
-    """Convert one Amazon JSON hit to a JobPosting."""
+    """
+    Validate and transform one raw Amazon JSON job hit into a normalized
+    ``JobPosting``, enforcing recency cutoff, strict India location verification,
+    Gen-AI relevance, experience extraction, and skill tagging.
+
+    Args:
+        hit (dict): Single job object from Amazon's JSON ``jobs`` array.
+        cutoff_date (Optional[date]): Oldest allowed posting date (inclusive).
+        target_location (str): Requested target location string (default: ``"India"``).
+
+    Returns:
+        Optional[JobPosting]: Normalized ``JobPosting`` instance if valid and matching
+            all filters, or ``None`` if discarded.
+    """
     title = (hit.get("title") or "").strip()
     basic_quals = (hit.get("basic_qualifications") or "").strip()
     pref_quals = (hit.get("preferred_qualifications") or "").strip()
@@ -160,13 +202,34 @@ def _build_job(
 
 
 def _build_url(job_path: str) -> str:
+    """
+    Construct a full Amazon Careers URL from a relative or absolute ``job_path``.
+
+    Args:
+        job_path (str): Relative path (e.g. ``"/en/jobs/123"``) or full HTTP URL.
+
+    Returns:
+        str: Absolute URL pointing to the Amazon Jobs posting.
+    """
     if job_path.startswith("http"):
         return job_path
     return _AMAZON_BASE_URL + (job_path if job_path.startswith("/") else f"/{job_path}")
 
 
 def _location_matches(target_loc: str, hit: dict) -> bool:
-    """Verify that the Amazon job hit actually matches the requested location."""
+    """
+    Perform a fast location pre-check on raw Amazon hit metadata fields
+    (``normalized_location``, ``city``, ``country_code``, ``state``) against
+    the requested target location.
+
+    Args:
+        target_loc (str): User-requested location filter (e.g. ``"India"``, ``"USA"``, ``"Global"``).
+        hit (dict): Raw job dictionary returned by Amazon's search endpoint.
+
+    Returns:
+        bool: True when the hit's location metadata matches ``target_loc`` or
+            when location filtering is global/empty, else False.
+    """
     if not target_loc or target_loc.strip().lower() in ("global", "any", "all", ""):
         return True
 
@@ -197,14 +260,19 @@ def fetch_amazon_jobs(
     progress_callback=None,
 ) -> list[JobPosting]:
     """
-    Fetch Generative AI jobs from Amazon's public JSON endpoint.
+    Fetch and deduplicate Gen-AI job postings directly from Amazon's public
+    ``search.json`` API by paginating across all configured search terms with
+    recency cutoff and pagination guards.
 
-    Uses a shared HTTP client, large page sizes (100), and strict safety guards
-    to prevent infinite loops or stalled sockets.
+    Args:
+        location (str): Target search location (default: ``"India"``).
+        days (int): Lookback window in days; 0 disables date cutoff.
+        max_results (int): Maximum jobs to return; <= 0 disables result capping.
+        progress_callback (Optional[Callable[[str, str], None]]): Optional callback
+            invoked as ``progress_callback("Amazon", term)`` per search term.
 
-    Returns
-    -------
-    De-duplicated list of JobPosting objects for Amazon.
+    Returns:
+        list[JobPosting]: Deduplicated list of matching Amazon ``JobPosting`` records.
     """
     cutoff_date = (
         datetime.now().date() - timedelta(days=days)

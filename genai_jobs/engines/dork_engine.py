@@ -60,7 +60,17 @@ _INDIA_LOCATIONS_QUERY = '("India" OR "Bengaluru" OR "Hyderabad" OR "Pune")'
 
 
 def _build_genai_ddg_clause() -> str:
-    """Build DuckDuckGo boolean OR search clause from configured search terms."""
+    """
+    Assemble the quoted DuckDuckGo boolean ``OR`` search clause from external
+    ``search_terms`` (defaulting to ``Generative AI``, ``Agentic AI``, ``LLM``, ``RAG``).
+
+    Args:
+        None.
+
+    Returns:
+        str: Parenthesized DuckDuckGo ``OR`` clause such as
+            ``("Generative AI" OR "Agentic AI" OR "LLM" OR "RAG")``.
+    """
     terms = [t.strip() for t in (get_search_terms() or _DEFAULT_DORK_TERMS) if t.strip()]
     if not terms:
         terms = _DEFAULT_DORK_TERMS
@@ -69,9 +79,17 @@ def _build_genai_ddg_clause() -> str:
 
 def _build_dork_query(company: str, location: str) -> str:
     """
-    Build a site-restricted DDG query for a company using its configured career
-    portal / ATS domains. Returns empty string if no career domains exist so
-    non-portal job sites are never queried.
+    Construct a ``site:``-restricted DuckDuckGo query scoped strictly to the
+    target company's configured career portal domains combined with Gen-AI terms
+    and location qualifiers.
+
+    Args:
+        company (str): Canonical company name.
+        location (str): Target location filter (``"India"`` expands to major hubs).
+
+    Returns:
+        str: Formatted DuckDuckGo search query string, or ``""`` when the company
+            has no configured ``ats_domains`` so open-web sites are never queried.
     """
     domains = get_company_ats_domains().get(company, [])
     if not domains:
@@ -98,7 +116,23 @@ def _build_dork_query(company: str, location: str) -> str:
 # ─── DDG fetch with retry ─────────────────────────────────────────────────────
 
 def _ddg_search(query: str, max_results: int, timelimit: Optional[str] = None) -> list[dict]:
-    """Call DDGS.text() with retry; returns raw result list."""
+    """
+    Execute a DuckDuckGo text search via ``ddgs.DDGS.text()`` with retry handling
+    for transient errors and propagation of exhausted rate-limit exceptions to
+    the caller's circuit breaker.
+
+    Args:
+        query (str): Site-restricted DuckDuckGo search query string.
+        max_results (int): Maximum number of raw search results to request.
+        timelimit (Optional[str]): Optional DDG recency filter (``"d"``, ``"w"``, ``"m"``).
+
+    Returns:
+        list[dict]: Raw search hit dicts (each containing ``title``, ``href``, ``body``),
+            or ``[]`` on empty/non-fatal errors.
+
+    Raises:
+        DDGSException: Re-raised when rate-limit retries (429/202) are exhausted.
+    """
     try:
         from ddgs import DDGS
         from ddgs.exceptions import DDGSException
@@ -144,9 +178,17 @@ def _parse_ddg_result(
     target_location: str = "India",
 ) -> Optional[JobPosting]:
     """
-    Convert one DDGS.text() result dict to a JobPosting.
+    Validate and convert one raw DuckDuckGo search result into a ``JobPosting``
+    after filtering generic career-hub/blog pages, confirming exact domain
+    ownership via ``company_from_url()``, and verifying location and Gen-AI match.
 
-    DDG result keys: ``title``, ``href``, ``body``
+    Args:
+        result (dict): Raw DDGS result dictionary containing ``href``, ``title``, and ``body``.
+        company (str): Expected canonical company name for URL verification.
+        target_location (str): Requested target location filter (default: ``"India"``).
+
+    Returns:
+        Optional[JobPosting]: Normalized ``JobPosting`` if valid, or ``None`` if skipped.
     """
     url = result.get("href", "").strip()
     title = result.get("title", "").strip()
@@ -216,20 +258,20 @@ def fetch_via_dork(
     progress_callback=None,
 ) -> list[JobPosting]:
     """
-    For each company, build a DuckDuckGo ATS-dork query and parse the results
-    into JobPosting objects.
+    Run parallel site-restricted DuckDuckGo career-portal queries across target
+    companies with jitter delays and an automatic rate-limit circuit breaker,
+    returning deduplicated matching job postings.
 
-    Parameters
-    ----------
-    companies         : canonical company names
-    location          : forwarded into the DDG query string
-    days              : unused (DDG has no native date filter; kept for API symmetry)
-    max_results       : number of DDG results to request per company
-    progress_callback : optional callable(company, query_str) for UI updates
+    Args:
+        companies (list[str]): Canonical company names to search.
+        location (str): Target location filter encoded in queries and post-filters.
+        days (int): Recency window mapped to DuckDuckGo ``timelimit`` (``d``/``w``/``m``).
+        max_results (int): Maximum results kept per company (<= 0 uses DDG limit 30).
+        progress_callback (Optional[Callable[[str, str], None]]): Optional callback
+            invoked as ``progress_callback(company, query_or_status)``.
 
-    Returns
-    -------
-    De-duplicated list of JobPosting objects.
+    Returns:
+        list[JobPosting]: Deduplicated list of matching ``JobPosting`` objects.
     """
     seen_keys: set[str] = set()
     all_jobs: list[JobPosting] = []
@@ -250,6 +292,18 @@ def fetch_via_dork(
     rl_state = {"streak": 0, "tripped": False, "lock": threading.Lock()}
 
     def _query_one(company: str) -> list[JobPosting]:
+        """
+        Build and execute the site-restricted DDG query for a single company,
+        update circuit-breaker state on rate limits, parse valid hits, and sleep
+        with jitter before finishing.
+
+        Args:
+            company (str): Canonical company name to query.
+
+        Returns:
+            list[JobPosting]: Valid matching postings found for ``company``, or ``[]``
+                if skipped or rate-limited.
+        """
         query = _build_dork_query(company, location)
         if progress_callback:
             progress_callback(company, query or "skipped (no ATS domains)")

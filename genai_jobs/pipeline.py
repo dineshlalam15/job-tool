@@ -53,7 +53,16 @@ console = Console()
 # ─── Deduplication & Sorting ──────────────────────────────────────────────────
 
 def _deduplicate(jobs: list[JobPosting]) -> list[JobPosting]:
-    """Remove duplicate jobs using their dedup_key; preserve insertion order."""
+    """
+    Remove duplicate job postings using each posting's canonical ``dedup_key``
+    while preserving original insertion order.
+
+    Args:
+        jobs (list[JobPosting]): Raw list of collected job postings across engines.
+
+    Returns:
+        list[JobPosting]: Deduplicated list retaining the first occurrence per ``dedup_key``.
+    """
     seen: set[str] = set()
     unique: list[JobPosting] = []
     for job in jobs:
@@ -64,7 +73,16 @@ def _deduplicate(jobs: list[JobPosting]) -> list[JobPosting]:
 
 
 def _sort_jobs(jobs: list[JobPosting]) -> list[JobPosting]:
-    """Sort: company name ↑, then date_posted ↓ (most recent first)."""
+    """
+    Sort job postings alphabetically by company name (ascending) and then by
+    posting date (most recent first, placing unstated dates last).
+
+    Args:
+        jobs (list[JobPosting]): Deduplicated list of job postings.
+
+    Returns:
+        list[JobPosting]: Newly sorted list of job postings.
+    """
     return sorted(
         jobs,
         key=lambda j: (j.company, -(j.date_posted.toordinal() if j.date_posted else 0)),
@@ -77,11 +95,21 @@ def _filter_by_experience(
     strict_mode: bool = True,
 ) -> tuple[list[JobPosting], int, str]:
     """
-    Retain jobs whose stated experience requirement satisfies ``exp_spec``
-    (e.g., "4", "2-4", "<4", "fresher").
+    Filter job postings against an experience requirement expression (such as
+    ``"<4"``, ``"2-4"``, ``"4"``, ``"fresher"``, or ``"all"``), hydrating missing
+    bounds from job titles and descriptions before applying matching logic.
 
-    When strict_mode is True, jobs with completely unstated/unverified experience
-    (Exp: N/A) are rejected so senior roles never slip through.
+    Args:
+        jobs (list[JobPosting]): Candidate job postings after deduplication.
+        exp_spec (str | int): Experience requirement filter string or year cap.
+        strict_mode (bool): When True, rejects postings with unstated experience
+            (``exp_min == -1`` and ``exp_max == -1``).
+
+    Returns:
+        tuple[list[JobPosting], int, str]: Three-element tuple containing:
+            - filtered list of kept ``JobPosting`` records,
+            - count of skipped postings,
+            - human-readable label describing the active experience filter.
     """
     target_lo, target_hi = parse_experience_filter(exp_spec)
     if target_lo == -1 and target_hi == -1:
@@ -119,6 +147,16 @@ def _filter_by_experience(
 # ─── Progress helpers ─────────────────────────────────────────────────────────
 
 def _make_progress() -> Progress:
+    """
+    Construct the shared Rich multi-task progress bar used to display live
+    completion across concurrent career-portal engines.
+
+    Args:
+        None.
+
+    Returns:
+        Progress: Configured Rich ``Progress`` widget bound to the module console.
+    """
     return Progress(
         SpinnerColumn(spinner_name="dots"),
         TextColumn("[bold blue]{task.description}"),
@@ -135,7 +173,18 @@ def _make_progress() -> Progress:
 # ─── Terminal Output (Rich) ──────────────────────────────────────────────────
 
 def render_rich_table(jobs: list[JobPosting], title: str = "Gen-AI Job Postings") -> None:
-    """Render a Rich summary table followed by full clickable job URLs in the terminal."""
+    """
+    Print matching job postings directly in the terminal as a formatted Rich
+    summary table followed by an indexed, untruncated clickable URL list, or print
+    a warning message when no jobs match.
+
+    Args:
+        jobs (list[JobPosting]): Final sorted and filtered list of job postings.
+        title (str): Header title displayed above the Rich summary table.
+
+    Returns:
+        None: Writes formatted output directly to the Rich terminal console.
+    """
     if not jobs:
         console.print(
             "\n[bold yellow]⚠  No matching Gen-AI jobs found.[/bold yellow]\n"
@@ -203,7 +252,22 @@ def run_pipeline(
     strict_experience: bool = True,
 ) -> list[JobPosting]:
     """
-    Run the Gen-AI career-portal job-fetch pipeline concurrently across active engines.
+    Orchestrate concurrent execution across enabled career-portal engines
+    (Amazon JSON API, Direct ATS APIs, and DDG ATS dorking), merge and clean
+    all discovered postings, apply India location and experience filters, and
+    render the final results with URLs in the terminal.
+
+    Args:
+        companies (list[str]): Canonical company names to query.
+        location (str): Target location string (e.g. ``"India"``, ``"Bengaluru"``).
+        days (int): Maximum posting age window in days.
+        max_results (int): Maximum results per company per engine (0 means unlimited).
+        sources (str): Engine selector (``"ats"``, ``"dork"``, or ``"all"``).
+        experience (str | int): Experience filter expression (default: ``"<4"``).
+        strict_experience (bool): Reject unstated experience roles when True.
+
+    Returns:
+        list[JobPosting]: Final deduplicated, sorted, and filtered job postings.
     """
     t_start = time.monotonic()
     all_jobs: list[JobPosting] = []
@@ -242,10 +306,30 @@ def run_pipeline(
 
         # Thread-safe callbacks
         def _run_amazon() -> tuple[str, list[JobPosting]]:
+            """
+            Execute the Amazon JSON API engine inside a worker thread and keep its
+            Rich progress bar updated as each search term completes.
+
+            Args:
+                None.
+
+            Returns:
+                tuple[str, list[JobPosting]]: Pair of ``("amazon", fetched_jobs)``.
+            """
             counter = {"n": 0}
             amz_total = len(amz_terms)
 
             def _cb(company: str, term: str) -> None:
+                """
+                Update the Amazon progress bar safely whenever a search term starts.
+
+                Args:
+                    company (str): Company identifier supplied by the engine.
+                    term (str): Search query term currently being queried.
+
+                Returns:
+                    None.
+                """
                 with lock:
                     counter["n"] += 1
                     progress.update(
@@ -262,9 +346,29 @@ def run_pipeline(
             return ("amazon", jobs)
 
         def _run_ats() -> tuple[str, list[JobPosting]]:
+            """
+            Execute the Direct ATS Portals engine inside a worker thread and track
+            completed company portals on its Rich progress bar.
+
+            Args:
+                None.
+
+            Returns:
+                tuple[str, list[JobPosting]]: Pair of ``("ats", fetched_jobs)``.
+            """
             visited: set[str] = set()
 
             def _cb(company: str, detail: str) -> None:
+                """
+                Advance the Direct ATS progress bar when a company portal completes.
+
+                Args:
+                    company (str): Canonical company name being queried.
+                    detail (str): Status or adapter descriptor string.
+
+                Returns:
+                    None.
+                """
                 with lock:
                     if company not in visited:
                         visited.add(company)
@@ -279,9 +383,29 @@ def run_pipeline(
             return ("ats", jobs)
 
         def _run_dork() -> tuple[str, list[JobPosting]]:
+            """
+            Execute the DuckDuckGo career-portal dorking engine inside a worker
+            thread and update its Rich progress bar per company.
+
+            Args:
+                None.
+
+            Returns:
+                tuple[str, list[JobPosting]]: Pair of ``("dork", fetched_jobs)``.
+            """
             visited: set[str] = set()
 
             def _cb(company: str, query: str) -> None:
+                """
+                Advance the DDG Dork progress bar when a company query starts.
+
+                Args:
+                    company (str): Canonical company name being searched.
+                    query (str): Constructed site-restricted query or skip message.
+
+                Returns:
+                    None.
+                """
                 with lock:
                     if company not in visited:
                         visited.add(company)

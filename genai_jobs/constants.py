@@ -45,7 +45,16 @@ AMAZON_JOBS_API: str = _cfg.settings.amazon_api_url
 
 
 def refresh_constants() -> None:
-    """Reload all constants if configuration has changed at runtime."""
+    """
+    Re-read values from the active configuration singleton and overwrite all
+    module-level constants so custom ``--config-dir`` reloads take effect immediately.
+
+    Args:
+        None.
+
+    Returns:
+        None: Updates module global constant bindings in place.
+    """
     global CANONICAL_COMPANIES, COMPANY_ALIASES, ALIAS_TO_CANONICAL
     global COMPANY_ATS_DOMAINS, SEARCH_TERMS, MATCH_KEYWORDS
     global SKILLS_DETECTION_MAP, DEFAULT_LOCATION
@@ -70,7 +79,19 @@ def refresh_constants() -> None:
 
 
 def __getattr__(name: str):
-    """Dynamic fallback allowing live updates without restarting."""
+    """
+    Dynamically resolve supported configuration attribute names from active
+    config when accessed via module lookup.
+
+    Args:
+        name (str): Name of the attribute requested from ``genai_jobs.constants``.
+
+    Returns:
+        Any: Live configuration value corresponding to ``name``.
+
+    Raises:
+        AttributeError: If ``name`` is not a recognized configuration constant.
+    """
     cfg = get_config()
     if name == "CANONICAL_COMPANIES":
         return get_canonical_companies()
