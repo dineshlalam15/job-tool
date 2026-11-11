@@ -13,6 +13,7 @@ from genai_jobs.utils.filters import (
     detect_skills,
     extract_india_location,
     is_india_location,
+    is_amazon_sde1,
     EXPERIENCE_UNKNOWN,
 )
 
@@ -28,5 +29,6 @@ __all__ = [
     "detect_skills",
     "extract_india_location",
     "is_india_location",
+    "is_amazon_sde1",
     "EXPERIENCE_UNKNOWN",
 ]

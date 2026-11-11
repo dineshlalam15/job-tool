@@ -46,6 +46,7 @@ from genai_jobs.utils.filters import (
     parse_experience,
     extract_india_location,
     is_india_location,
+    is_amazon_sde1,
 )
 from genai_jobs.utils.security import apply_jitter_delay
 
@@ -232,6 +233,9 @@ def _parse_ddg_result(
         return None
 
     exp_min, exp_max = parse_experience(title + " " + body, title=title)
+    if company == "Amazon" and not is_amazon_sde1(title, exp_min, exp_max):
+        return None
+
     skills = detect_skills(title, body)
 
     return JobPosting(

@@ -521,8 +521,8 @@ def infer_seniority_from_title(title: str) -> tuple[int, int]:
         r"\b("
         r"senior|sr\.?|lead|tech\s+lead|team\s+lead|project\s+lead|manager|architect|architecture|"
         r"managing\s+consultant|principal\s+consultant|advisory\s+consultant|smts|ict\s*(?:4|iv|5|v)|"
-        r"(?:sde|software|dev(?:eloper)?|eng(?:ineer|r)?|data\s+scientist|scientist|mts|consultant|analyst|qa|tester)\s*(?:3|iii|4|iv|5|v)\b|"
-        r"(?:level|lvl|grade|band|l)\s*(?:3|iii|4|iv|5|v|6|vi|7|vii|8|viii|9|ix|10|x|63|64|65|66)\b"
+        r"(?:sde|software|dev(?:eloper)?|eng(?:ineer|r)?|data\s+scientist|scientist|mts|consultant|analyst|qa|tester)[\s-]*(?:3|iii|4|iv|5|v)\b|"
+        r"(?:level|lvl|grade|band|l)[\s-]*(?:3|iii|4|iv|5|v|6|vi|7|vii|8|viii|9|ix|10|x|63|64|65|66)\b"
         r")\b",
         t,
     ):
@@ -532,8 +532,8 @@ def infer_seniority_from_title(title: str) -> tuple[int, int]:
     if re.search(
         r"\b("
         r"associate|junior|jr\.?|graduate|"
-        r"(?:sde|software|dev(?:eloper)?|eng(?:ineer|r)?|data\s+scientist|scientist|mts|consultant|analyst)\s*(?:1|i\b)|"
-        r"(?:level|lvl|grade|band|l)\s*(?:1|i\b)"
+        r"(?:sde|software|dev(?:eloper)?|eng(?:ineer|r)?|data\s+scientist|scientist|mts|consultant|analyst)[\s-]*(?:1|i\b)|"
+        r"(?:level|lvl|grade|band|l)[\s-]*(?:1|i\b)"
         r")\b",
         t,
     ):
@@ -549,8 +549,8 @@ def infer_seniority_from_title(title: str) -> tuple[int, int]:
     # 7. Mid-level: SDE II, Engineer II, Data Scientist II -> 2 to 4 years (ideal for ~2 years experience)
     if re.search(
         r"\b("
-        r"(?:sde|software|dev(?:eloper)?|eng(?:ineer|r)?|data\s+scientist|scientist|mts|consultant|analyst)\s*(?:2|ii\b)|"
-        r"(?:level|lvl|grade|band|l)\s*(?:2|ii\b|61|62)|"
+        r"(?:sde|software|dev(?:eloper)?|eng(?:ineer|r)?|data\s+scientist|scientist|mts|consultant|analyst)[\s-]*(?:2|ii\b)|"
+        r"(?:level|lvl|grade|band|l)[\s-]*(?:2|ii\b|61|62)|"
         r"ict\s*(?:2|ii|3|iii)|ba\s*4|"
         r"mid[\s-]level|intermediate"
         r")\b",
@@ -735,3 +735,71 @@ def detect_skills(title: str, description: str = "") -> list[str]:
             matched.append(skill_name)
 
     return matched if matched else ["GenAI"]
+
+
+# ─── Amazon SDE-1 Filtering ──────────────────────────────────────────────────
+
+_AMAZON_SDE_TITLE_RE = re.compile(
+    r"\b(?:sde(?:[\s-]*(?:i|1))?|software\s+(?:dev(?:elopment)?\s+)?engineer)\b",
+    re.I,
+)
+
+_AMAZON_EXPLICIT_SDE1_RE = re.compile(
+    r"(?:"
+    r"\bsde[\s-]*(?:i|1)\b"
+    r"|\bsoftware\s+(?:dev(?:elopment)?\s+)?engineer[\s-]*(?:i|1)\b"
+    r")",
+    re.I,
+)
+
+_AMAZON_NON_SDE1_TITLE_RE = re.compile(
+    r"(?:"
+    r"\b(?:ii|iii|iv)\b"
+    r"|\b(?:sde|software\s+(?:dev(?:elopment)?\s+)?engineer|engineer|eng)[\s-]*(?:v|2|3|4|5)\b"
+    r"|\bsde(?:2|3|4|ii|iii)\b"
+    r"|\b(?:l|level)[\s-]*(?:5|6|7|8)\b"
+    r"|\b(?:senior|sr\.?|lead|principal|staff|distinguished|fellow|manager|director|architect|head|vp)\b"
+    r"|\b(?:intern|internship|co-?op)\b"
+    r"|\b(?:in\s+test|sdet|qa|qae|quality\s+assurance|test\s+engineer|"
+    r"support\s+engineer|cloud\s+support|application\s+support|technical\s+support|production\s+support|it\s+support|"
+    r"systems?\s+dev(?:elopment)?|sysde|"
+    r"data\s+engineer|data\s+scientist|applied\s+scientist|research\s+scientist|scientist|"
+    r"analyst|business\s+intelligence|bie|consultant|program\s+manager|product\s+manager|tpm|sdm)\b"
+    r")",
+    re.I,
+)
+
+
+def is_amazon_sde1(title: str, exp_min: int = -1, exp_max: int = -1) -> bool:
+    """
+    Determine whether an Amazon job posting represents an SDE-1 role.
+
+    Accepts explicit SDE-1 titles (e.g. ``Software Development Engineer I``,
+    ``SDE I``, ``SDE-1``) as well as unnumbered ``Software Development Engineer``
+    (or ``Software Engineer`` / ``SDE``) titles when parsed minimum experience is
+    strictly verified to be ``< 3`` years, while rejecting SDE II+, Senior/Lead,
+    Intern, SDET/QA, Data Engineer, Data/Applied Scientist, and Manager roles.
+
+    Args:
+        title (str): Amazon job posting title.
+        exp_min (int): Parsed minimum required years of experience (``-1`` if unstated).
+        exp_max (int): Parsed maximum required years of experience (``-1`` if unstated).
+
+    Returns:
+        bool: True if the posting qualifies as an Amazon SDE-1 role, else False.
+    """
+    if not title or not _AMAZON_SDE_TITLE_RE.search(title):
+        return False
+    if _AMAZON_NON_SDE1_TITLE_RE.search(title):
+        return False
+
+    if exp_min >= 3:
+        return False
+
+    if exp_min == -1:
+        if exp_max != -1:
+            return exp_max < 3
+        # Unstated experience is allowed only when the title explicitly says SDE I / 1
+        return bool(_AMAZON_EXPLICIT_SDE1_RE.search(title))
+
+    return True

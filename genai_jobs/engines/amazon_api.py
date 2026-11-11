@@ -41,6 +41,7 @@ from genai_jobs.utils.filters import (
     truncate,
     extract_india_location,
     is_india_location,
+    is_amazon_sde1,
 )
 from genai_jobs.utils.security import apply_jitter_delay, get_stealth_headers
 
@@ -143,7 +144,8 @@ def _build_job(
     """
     Validate and transform one raw Amazon JSON job hit into a normalized
     ``JobPosting``, enforcing recency cutoff, strict India location verification,
-    Gen-AI relevance, experience extraction, and skill tagging.
+    Gen-AI relevance, Amazon SDE-1 role filtering, experience extraction, and
+    skill tagging.
 
     Args:
         hit (dict): Single job object from Amazon's JSON ``jobs`` array.
@@ -185,6 +187,9 @@ def _build_job(
         return None
 
     exp_min, exp_max = parse_experience(full_text, title=title)
+    if not is_amazon_sde1(title, exp_min, exp_max):
+        return None
+
     skills = detect_skills(title, full_text)
 
     return JobPosting(
