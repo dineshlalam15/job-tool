@@ -1,180 +1,338 @@
 # 🤖 genai-jobs
 
-> **Lightweight Python CLI tool** that fetches the latest **Generative AI, Agentic AI, LLM, and RAG job openings** directly from the official **career portals of 38 top-tier tech companies** and prints matching jobs with their clickable URLs straight to your terminal.
+> **Lightweight, 100% deterministic Python CLI tool** that fetches active **Generative AI, Agentic AI, LLM, and RAG job openings** directly from the official **career portals of 38 top-tier tech and financial companies** and prints matching roles with clickable URLs straight to your terminal.
 
-Built specifically for software and AI engineers (e.g., with ~2 years of experience) who want a fast, zero-bloat terminal tool instead of manually browsing dozens of career portals or noisy third-party job boards.
+> **No LLM / AI Model Required:** `genai-jobs` runs completely locally using official career-portal APIs, DuckDuckGo site-restricted search (`ddgs`), and deterministic regex/keyword filtering. **No OpenAI/Gemini/Anthropic API keys, no local LLMs, no GPU, and zero token costs.**
+
+Built for software and AI engineers who want a fast, zero-bloat terminal tool instead of manually browsing dozens of career portals or noisy third-party job boards.
 
 ---
 
-## ✨ Features & Architecture
+## ✨ Key Capabilities
 
 | Capability | Details |
 |---|---|
-| **38 Target Companies** | Pre-configured for Google, Microsoft, Apple, Amazon, Disney, IBM Labs, EY, ZS Associates, Quantiphi, JP Morgan Chase, Goldman Sachs, Wells Fargo, DBS, Micron, Synopsys, Samsung, Berkadia, Invesco, Verisk Analytics, ADP, Coforge, CHUBB, ICICI Lombard, Axis Bank, Adobe, HPE, eBay, Flipkart, JODO, Honeywell, HCL, Cyient, Caterpillar, Ericsson, Visa, Mastercard, American Express, and BNY Mellon. |
-| **Strict India Location** | **Strictly searches and filters for jobs within India only**. Accepts any location within India (Bengaluru, Hyderabad, Pune, Mumbai, Gurugram, Noida, Chennai, Delhi NCR, Kolkata, Pan-India Remote), while automatically filtering out international/foreign roles (USA, UK, Singapore, Europe, etc.). |
-| **Strict Experience Filtering** | Profile-matched for **< 4 years** minimum required experience. For experience ranges (e.g., `2–4 yr`, `3–5 yr`), checks that the **minimum required years** is `< 4` (so `3–5 yr` is kept since `3 < 4`), while eliminating `≥ 4 yr` roles (`4+ yr`, `4–8 yr`, `5+ yr`, Senior, Lead, Manager, Architect, Principal, Staff, Engineer III, MTS 3+). |
-| **Weekly Timeframe** | Defaults to active jobs posted in the **last 7 days** (`default_days: 7`). |
-| **Fetch All Openings (No Capping)** | Defaults to fetching **all** matching job openings without artificial caps (`default_max_results: 0`). You can optionally pass `-m <N>` to cap results. |
-| **Focused Search Terms** | Strictly searches and matches only **Generative AI / GenAI, Agentic AI, LLM, and RAG** across all engines for fast, high-signal execution. |
-| **Career-Portal-Only Fetching** | Runs 3 concurrent career-portal engines: **Amazon JSON API**, **Direct ATS Portals Engine** (`-s ats` supporting 24 direct company career portals: Amazon, Google, Adobe, Goldman Sachs, EY, ZS Associates, JP Morgan Chase, Micron, Disney, Wells Fargo, Honeywell, CHUBB, Invesco, Quantiphi, Berkadia, Caterpillar, Ericsson, Visa, Mastercard, American Express, BNY Mellon, Synopsys, eBay, HPE), and **Parallel DuckDuckGo ATS Dorking** (`-s dork` restricted strictly to configured company career domains; in default `-s all` mode automatically focuses on the remaining 14 portals without direct APIs for faster execution). Third-party job boards are excluded. |
-| **Anti-Bot & Stealth Security** | Rotates modern desktop browser User-Agents (Chrome 131, Safari 18, Firefox 133), Client Hints (`sec-ch-ua`), and `Sec-Fetch-*` directives with randomized jitter pacing. |
-| **Terminal-Only Output** | Renders a clean Rich summary table followed by full, untruncated, clickable **Job URLs** directly in the terminal—no generated files or UI bloat. |
-| **100% Loose Coupling** | All companies, aliases, career portal domains, search terms, and runtime settings are configured externally in `config/*.json`. |
+| **Zero LLM / No API Keys** | Pure Python (`httpx`, `ddgs`, `pydantic`, `typer`, `rich`). Requires **no LLM model**, no paid API keys, and no external database. |
+| **38 Pre-Configured Companies** | Covers Big Tech, FinTech, Payments, Enterprise AI, and Consulting portals (full table below). |
+| **Amazon SDE-1 Only Rule** | For Amazon, automatically filters down to **SDE-1** roles (`Software Development Engineer I` / `SDE I`, or unnumbered `Software Development Engineer` with `< 3 yr` experience), excluding SDE II+, Data Engineer, Applied/Data Scientist, SDET, Intern, and Manager postings. |
+| **Strict India Location** | Defaults to **India only** (Bengaluru, Hyderabad, Pune, Mumbai, Gurugram, Noida, Chennai, Delhi NCR, Kolkata, Pan-India hubs), rejecting foreign-only roles unless overridden with `-l`. |
+| **Strict Experience Filtering** | Defaults to **`< 4` years** minimum required experience (`strict_experience: true`). Ranges like `3–5 yr` qualify (`3 < 4`), while `4+ yr`, Senior, Lead, Manager, Staff, and Principal roles are excluded. |
+| **Weekly Lookback & No Cap** | Defaults to postings from the **last 7 days** (`default_days: 7`) with no artificial result cap (`default_max_results: 0`). |
+| **Career-Portal-Only Fetching** | Runs 3 concurrent engines: **Amazon JSON API**, **Direct ATS Portals Engine** (23 official portals), and **Parallel DuckDuckGo ATS Dorking** (`site:` restricted strictly to official company career domains; in default `-s all` mode automatically targets the remaining 14 portals). |
+| **100% Loose Coupling** | Customize your preferred companies, aliases, career domains, keywords, and default filters in `config/*.json` (or via `--config-dir`) without touching Python code. |
 
 ---
 
-## 🚀 Setup & Installation
+## 🏢 Supported Companies (38)
 
-### 1. Clone and Navigate to the Repository
-```bash
-git clone https://github.com/dineshlalam15/job-tool.git
-cd job-tool
-```
+You can query any company by its canonical name or any listed CLI alias (`-c <name_or_alias>`).
 
-### 2. Create and Activate Virtual Environment
-```bash
-python3 -m venv .venv
-source .venv/bin/activate        # On Windows: .venv\Scripts\activate
-```
+| # | Company | CLI Aliases | Fetching Engine | Official Career / ATS Domains |
+|---:|---|---|---|---|
+| 1 | **Google** | `alphabet` | Direct ATS API | `careers.google.com`, `google.com/about/careers` |
+| 2 | **Microsoft** | `msft` | DDG ATS Dork | `careers.microsoft.com`, `jobs.careers.microsoft.com` |
+| 3 | **Apple** | — | DDG ATS Dork | `jobs.apple.com` |
+| 4 | **Amazon** *(SDE-1 only)* | `aws` | Amazon JSON API | `amazon.jobs` |
+| 5 | **IBM Labs** | `ibm` | DDG ATS Dork | `ibm.com/careers`, `ibm.biz` |
+| 6 | **EY** | `ernst & young`, `ernst and young`, `ey india`, `ey gds` | Direct ATS API | `careers.ey.com`, `ey.com/en_in/careers`, `ey.com/en_gl/careers` |
+| 7 | **ZS Associates** | `zs`, `zs associates india` | Direct ATS API | `jobs.zs.com`, `careers-zs.icims.com`, `incareers-zs.icims.com`, `zs.com/careers` |
+| 8 | **Quantiphi** | — | Direct ATS API | `quantiphi.com/careers`, `quantiphi.wd1.myworkdayjobs.com`, `jobs.lever.co/quantiphi` |
+| 9 | **JP Morgan Chase** | `jpmc`, `jpmorgan` | Direct ATS API | `jpmc.fa.oraclecloud.com`, `careers.jpmorgan.com` |
+| 10 | **Goldman Sachs** | `gs`, `goldman` | Direct ATS API | `goldmansachs.com/careers`, `goldmansachs.tal.net`, `higher.gs.com` |
+| 11 | **Wells Fargo** | — | Direct ATS API | `wellsfargo.com/about/careers`, `wd1.myworkdaysite.com/recruiting/wf/WellsFargoJobs`, `wellsfargojobs.com` |
+| 12 | **DBS** | `dbs bank` | DDG ATS Dork | `dbs.com/careers`, `dbs.taleo.net` |
+| 13 | **Micron** | — | Direct ATS API | `micron.wd1.myworkdayjobs.com`, `micron.com/careers` |
+| 14 | **Synopsys** | — | Direct ATS API | `synopsys.wd1.myworkdayjobs.com`, `synopsys.com/careers`, `careers.synopsys.com` |
+| 15 | **Samsung** | — | DDG ATS Dork | `samsung.com/careers`, `sec.taleo.net`, `sri.taleo.net` |
+| 16 | **Berkadia** | — | Direct ATS API | `berkadia.wd1.myworkdayjobs.com`, `berkadia.com/careers` |
+| 17 | **Invesco** | — | Direct ATS API | `careers.invesco.com`, `invesco.wd1.myworkdayjobs.com/IVZ` |
+| 18 | **Verisk Analytics** | `verisk` | DDG ATS Dork | `careers.verisk.com`, `verisk.wd1.myworkdayjobs.com`, `smartrecruiters.com/Verisk` |
+| 19 | **ADP** | — | DDG ATS Dork | `jobs.adp.com` |
+| 20 | **Coforge** | — | DDG ATS Dork | `careers.coforge.com` |
+| 21 | **CHUBB** | — | Direct ATS API | `fa-ewgu-saasfaprod1.fa.ocs.oraclecloud.com`, `careers.chubb.com`, `chubb.com/careers` |
+| 22 | **ICICI Lombard** | `icici` | DDG ATS Dork | `icicilombard.peoplestrong.com`, `icicilombard.com/careers` |
+| 23 | **Axis Bank** | `axis` | DDG ATS Dork | `axisbank.com/careers`, `axisbank.taleo.net` |
+| 24 | **Adobe** | — | Direct ATS API | `adobe.wd5.myworkdayjobs.com`, `careers.adobe.com` |
+| 25 | **HPE** | `hewlett packard enterprise` | Direct ATS API | `careers.hpe.com` |
+| 26 | **eBay** | — | Direct ATS API | `ebayinc.com/careers`, `jobs.ebayinc.com` |
+| 27 | **Flipkart** | — | DDG ATS Dork | `flipkartcareers.com` |
+| 28 | **JODO** | — | DDG ATS Dork | `jodo.in/careers`, `jobs.lever.co/jodo` |
+| 29 | **Honeywell** | — | Direct ATS API | `ibqbjb.fa.ocs.oraclecloud.com`, `careers.honeywell.com` |
+| 30 | **HCL** | `hcltech` | DDG ATS Dork | `hcltech.com/careers` |
+| 31 | **Cyient** | — | DDG ATS Dork | `cyient.wd3.myworkdayjobs.com`, `cyient.com/careers` |
+| 32 | **Disney** | `hotstar` | Direct ATS API | `disneycareers.com`, `jobs.disneycareers.com`, `join.disneycareers.com`, `disney.wd5.myworkdayjobs.com`, `careers.hotstar.com` |
+| 33 | **Caterpillar** | `cat` | Direct ATS API | `cat.wd5.myworkdayjobs.com`, `careers.caterpillar.com` |
+| 34 | **Ericsson** | `ericson` | Direct ATS API | `jobs.ericsson.com` |
+| 35 | **Visa** | — | Direct ATS API | `visa.wd5.myworkdayjobs.com`, `usa.visa.com/careers`, `visa.com/careers`, `smartrecruiters.com/Visa` |
+| 36 | **Mastercard** | `master card` | Direct ATS API | `mastercard.wd1.myworkdayjobs.com`, `careers.mastercard.com` |
+| 37 | **American Express** | `amex` | Direct ATS API | `egug.fa.us2.oraclecloud.com`, `careers.americanexpress.com`, `americanexpress.com/en-us/careers`, `aexp.eightfold.ai` |
+| 38 | **BNY Mellon** | `bny`, `bank of new york mellon` | Direct ATS API | `eofe.fa.us2.oraclecloud.com`, `bny.com/careers`, `jobs.bnymellon.com` |
 
-### 3. Install the CLI & Dependencies
-```bash
-pip install -e .
-```
-*(Reads runtime dependencies from `pyproject.toml` and registers the `genai-jobs` command inside your virtual environment.)*
+> Run `genai-jobs --list-companies` anytime to print the active company list from your configuration.
+
+---
+
+## 🚀 Local Installation (macOS & Windows)
+
+### Prerequisites
+* **Python 3.10+** (`python3 --version` on macOS, `python --version` on Windows)
+* **Git** (`git --version`)
+* Internet connection (for installing Python packages and querying career portals)
+
+---
+
+### Option A: macOS (Terminal / zsh / bash)
+
+1. **Clone and enter the repository:**
+   ```bash
+   git clone https://github.com/dineshlalam15/job-tool.git
+   cd job-tool
+   ```
+
+2. **Create and activate a virtual environment:**
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+3. **Install the CLI in editable mode:**
+   ```bash
+   pip install -e .
+   ```
+
+4. **Verify installation:**
+   ```bash
+   genai-jobs --help
+   ```
+
+---
+
+### Option B: Windows (PowerShell or Command Prompt)
+
+1. **Clone and enter the repository:**
+   ```powershell
+   git clone https://github.com/dineshlalam15/job-tool.git
+   cd job-tool
+   ```
+
+2. **Create and activate a virtual environment:**
+   * **PowerShell:**
+     ```powershell
+     python -m venv .venv
+     .venv\Scripts\Activate.ps1
+     ```
+     *(If PowerShell blocks script execution, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or activate using Command Prompt below.)*
+   * **Command Prompt (`cmd.exe`):**
+     ```bat
+     python -m venv .venv
+     .venv\Scripts\activate.bat
+     ```
+
+3. **Install the CLI in editable mode:**
+   ```powershell
+   pip install -e .
+   ```
+
+4. **Verify installation:**
+   ```powershell
+   genai-jobs --help
+   ```
 
 ---
 
 ## 🖥️ How to Run the Application
 
+### On macOS
+
+* **With virtual environment activated** (`source .venv/bin/activate`):
+  ```bash
+  genai-jobs
+  ```
+* **Without activating the virtual environment** (run from project root):
+  ```bash
+  ./genai-jobs
+  # or:
+  .venv/bin/genai-jobs
+  # or:
+  .venv/bin/python -m genai_jobs
+  ```
+
+### On Windows
+
+* **With virtual environment activated** (`.venv\Scripts\Activate.ps1` or `.venv\Scripts\activate.bat`):
+  ```powershell
+  genai-jobs
+  ```
+* **Without activating the virtual environment** (run from project root):
+  ```powershell
+  .venv\Scripts\genai-jobs.exe
+  # or:
+  .venv\Scripts\python.exe -m genai_jobs
+  ```
+
+---
+
+## 🔍 CLI Usage & Filter Examples
+
+All examples below work identically on **macOS** and **Windows** (using `genai-jobs` when the venv is active, or `./genai-jobs` on macOS / `.venv\Scripts\genai-jobs.exe` on Windows).
+
 ### 1. Default Run (Recommended)
-Fetches all matching jobs across all 38 companies in India posted in the **last 7 days**, strictly filtered for **< 4 years experience**, and displays the table + clickable job URLs in your terminal:
+Searches all configured companies in **India**, posted in the **last 7 days**, strictly filtered for **`< 4` years** experience (and SDE-1 only for Amazon):
 ```bash
 genai-jobs
 ```
-*(Alternatively, without activating the venv: `./genai-jobs`, `.venv/bin/genai-jobs`, or `python -m genai_jobs`.)*
-
----
 
 ### 2. Filter by Specific Companies
-Specify one or more target companies using `-c` or `--company` (accepts full names or aliases like `JPMC`, `HCL`, `MSFT`, `Google`):
+Pass `-c` / `--company` multiple times using full names or aliases:
 ```bash
-# Query Big Tech / FAANG
-genai-jobs -c Google -c Microsoft -c Apple -c Amazon
-
-# Query Financial Services, Payments & Insurance
-genai-jobs -c "JP Morgan Chase" -c "Goldman Sachs" -c "Wells Fargo" -c "BNY Mellon" -c Visa -c Mastercard -c Amex -c "ICICI Lombard"
-
-# Query AI, Data & Advisory Companies
-genai-jobs -c Adobe -c EY -c "ZS Associates" -c Quantiphi -c Flipkart -c JODO
+genai-jobs -c Google -c Amazon -c Microsoft -c Apple
+genai-jobs -c jpmc -c gs -c "Wells Fargo" -c amex -c Visa -c Mastercard
+genai-jobs -c Adobe -c ey -c zs -c Quantiphi -c Flipkart
 ```
 
----
-
-### 3. Filter by Location (India Focus)
-By default, the tool **strictly searches across all of India** (any city, tech hub, or pan-India remote role). Narrow to specific cities with `-l` or `--location`:
+### 3. Filter by Location
 ```bash
-# Default: all Indian tech hubs and remote roles
-genai-jobs
-
-# Narrow to Bengaluru, Hyderabad, Pune, or Gurugram
 genai-jobs -l Bengaluru
 genai-jobs -l Hyderabad
 genai-jobs -l Pune
 genai-jobs -l Gurugram
+genai-jobs -l Global
 ```
 
----
-
-### 4. Customise Posting Recency (Days)
+### 4. Filter by Posting Age & Max Results
 ```bash
 # Last 3 days only
 genai-jobs -d 3
 
-# Last 14 days
-genai-jobs -d 14
+# Last 14 days, capped at 20 jobs per company per engine
+genai-jobs -d 14 -m 20
 ```
 
----
-
 ### 5. Experience Filter Controls
-Defaults to `<4` years (minimum required years `< 4`, with strict verification enabled — so ranges like `3–5 yr` qualify because `3 < 4`, while `4+ yr` / `4–8 yr` are excluded). Override with `-x` / `--experience`:
 ```bash
-# Strictly less than 4 years (default)
+# Less than 4 years (default)
 genai-jobs -x "<4"
 
-# Target specifically 2 to 4 years
+# Specific range (2 to 4 years)
 genai-jobs -x "2-4"
 
-# Freshers & entry level only
+# Freshers / entry-level only
 genai-jobs -x fresher
 
-# Include unstated-experience roles as well
+# Include jobs where experience is not explicitly mentioned
 genai-jobs --allow-unstated
 
-# Disable experience filter entirely
+# Disable experience filtering completely
 genai-jobs -x all
 ```
 
----
-
-### 6. List All 38 Configured Companies
+### 6. Select Fetching Engine (`-s` / `--sources`)
 ```bash
-genai-jobs --list-companies
-```
-
----
-
-### 7. Choose Specific Career-Portal Engines
-By default, `genai-jobs` runs all career-portal engines concurrently (`all`). Restrict with `-s` or `--sources`:
-```bash
-# Run Direct Official Career Portal APIs only (ultra-fast across 24 company portals)
+# Direct career-portal APIs only (Amazon + 23 direct ATS portals — fastest)
 genai-jobs -s ats
 
-# Run DDG Career-Portal ATS Dorking only
+# DuckDuckGo site-restricted career-portal dorking only
 genai-jobs -s dork
 
-# Run all company career-portal engines concurrently (default)
+# All engines concurrently (default)
 genai-jobs -s all
 ```
 
+### 7. Utility & Debug Flags
+```bash
+genai-jobs --list-companies   # Print all configured companies and exit
+genai-jobs -v                 # Enable debug logging
+genai-jobs --help             # Show full CLI reference
+```
+
 ---
 
-### 8. View All CLI Options
-```bash
-genai-jobs --help
+## ⚙️ Keeping Your Preferred Companies, Keywords & Default Filters
+
+You do **not** need to edit any Python code to customize the tool for your own job hunt. Every company, search keyword, and default filter lives in JSON under `config/`.
+
+### 1. Customize Your Preferred Company List (`config/companies.json`)
+Keep only the companies you care about, or add new companies:
+```json
+{
+  "companies": [
+    {
+      "name": "Google",
+      "aliases": ["alphabet"],
+      "ats_domains": ["careers.google.com", "google.com/about/careers"]
+    },
+    {
+      "name": "Your Preferred Company",
+      "aliases": ["ypc"],
+      "ats_domains": ["careers.example.com", "boards.greenhouse.io/example"]
+    }
+  ]
+}
 ```
+* **Remove companies** you don't want by deleting their JSON object from `"companies"`.
+* **Add any new company** with its career portal URL in `"ats_domains"`—the DDG ATS Dork engine will automatically search it without needing code changes.
+
+### 2. Customize Default Filters (`config/settings.json`)
+Edit `config/settings.json` to change the defaults whenever you run `genai-jobs` without flags:
+```json
+{
+  "default_days": 7,
+  "default_experience": "<4",
+  "strict_experience": true,
+  "default_location": "India",
+  "default_max_results": 0,
+  "default_sources": "all"
+}
+```
+* `default_days`: Lookback window (`1`–`90`)
+* `default_experience`: Default `-x` filter (`"<4"`, `"2-4"`, `"fresher"`, `"all"`)
+* `strict_experience`: `true` rejects jobs with unstated experience; `false` allows them
+* `default_location`: Default city/country (`"India"`, `"Bengaluru"`, `"Hyderabad"`, `"USA"`, `"Global"`, etc.)
+* `default_max_results`: `0` = unlimited results per company per engine
+* `default_sources`: `"all"`, `"ats"`, or `"dork"`
+
+### 3. Customize Skills & Search Terms (`config/skills.json`)
+Modify `search_terms` (sent to career portals) and `skills_detection` (used for matching & table tags):
+```json
+{
+  "search_terms": ["Generative AI", "Agentic AI", "LLM", "RAG"],
+  "skills_detection": {
+    "Generative AI": ["generative ai", "genai", "gen ai"],
+    "Agentic AI": ["agentic ai", "agentic", "ai agent", "ai agents", "multi-agent", "multiagent"],
+    "LLM": ["llm", "llms", "large language model", "large language models"],
+    "RAG": ["rag", "retrieval augmented generation", "retrieval-augmented"]
+  }
+}
+```
+
+### 4. Keep a Separate Personal Config Folder (`--config-dir`)
+To avoid merge conflicts when pulling repository updates, copy `config/` to a personal folder (e.g., `~/my-job-config/` or `C:\Users\<you>\my-job-config\`), edit your preferred companies and filters there, and either pass `--config-dir` or set `GENAI_JOBS_CONFIG_DIR`:
+
+* **CLI flag (macOS & Windows):**
+  ```bash
+  genai-jobs --config-dir /path/to/my-job-config
+  ```
+* **Environment variable (macOS):**
+  ```bash
+  export GENAI_JOBS_CONFIG_DIR="$HOME/my-job-config"
+  genai-jobs
+  ```
+* **Environment variable (Windows PowerShell):**
+  ```powershell
+  $env:GENAI_JOBS_CONFIG_DIR = "$HOME\my-job-config"
+  genai-jobs
+  ```
+
+Config discovery priority: `--config-dir` → `GENAI_JOBS_CONFIG_DIR` → `./config` → package `config/`.
 
 ---
 
 ## 📺 Terminal Output
 
-Every run prints two sections directly in your terminal without creating any extra files on disk:
+Every run prints directly to your terminal without creating output files on disk:
 
-1. **Summary Table** — Numbered rows showing `Company`, clickable `Job Title`, `Location`, `Posted`, `Exp`, `Skills`, and `Source`.
-2. **Job URLs** — Clean, indexed list (`[1] Company — Title · Location`) with each full, untruncated career-portal URL on its own line so you can either Cmd/Ctrl+Click (OSC-8 hyperlink) or copy-paste cleanly in any terminal.
-
----
-
-## ⚙️ Loose Coupling & External Configuration
-
-All configuration lives in the `config/` directory:
-
-| File | What it Controls |
-|---|---|
-| [`config/companies.json`](config/companies.json) | The 38 target companies, optional CLI shorthand aliases, and their official ATS career domains. |
-| [`config/skills.json`](config/skills.json) | Core search terms (`Generative AI`, `Agentic AI`, `LLM`, `RAG`) and skills matching/tagging rules. |
-| [`config/settings.json`](config/settings.json) | Minimal runtime defaults: `default_days` (7), `default_experience` ("<4"), `strict_experience` (true), `default_location` ("India"), `default_max_results` (0 = all), and `default_sources` ("all"). |
-
-> **Custom Config Directory**: Pass `--config-dir <path>` or set `GENAI_JOBS_CONFIG_DIR` to point to a custom configuration folder without modifying project files.
-
----
-
-## 🛡️ Anti-Bot & Rate-Limit Protections
-
-* **Stealth Headers**: Dynamic emulation of modern Chrome/Safari/Firefox desktop browsers with Client Hints (`sec-ch-ua`, `sec-fetch-*`).
-* **Jitter Delay**: Paces search requests with randomized delays to avoid tripping WAF burst rate limits.
-* **Resilient Multi-Engine Failover**: Uses direct JSON/GraphQL/SSR endpoints alongside parallel ATS dorking with rate-limit backoff and circuit breaking.
+1. **Summary Table** — Numbered rows with `Company`, clickable `Job Title`, `Location`, `Posted`, `Exp`, `Skills`, and `Source`.
+2. **Job URLs** — Indexed list (`[1] Company — Title · Location`) with full, untruncated career-portal URLs ready for Cmd/Ctrl+Click or copy-paste.
 
 ---
 
@@ -183,107 +341,28 @@ All configuration lives in the `config/` directory:
 ```
 job-tool/
 ├── .gitignore                  # Git ignore rules (.venv, caches, .env, OS/IDE files)
-├── pyproject.toml              # Build system, metadata, dependencies & CLI script entry
-├── genai-jobs                  # Executable Bash wrapper invoking .venv/bin/genai-jobs
-├── README.md                   # Documentation, usage guide & codebase reference
-├── config/                     # External Configuration (Loose Coupling)
-│   ├── companies.json          # 38 target companies, optional shorthand aliases & ATS domains
-│   ├── skills.json             # Core search terms & GenAI/Agentic/LLM/RAG matching rules
-│   └── settings.json           # Minimal CLI runtime defaults (days, exp, location, sources)
-└── genai_jobs/                 # Core Application Package
+├── pyproject.toml              # Build config, dependencies & `genai-jobs` CLI entry point
+├── genai-jobs                  # Executable Bash wrapper for macOS/Linux (.venv/bin/genai-jobs)
+├── README.md                   # Documentation, setup, cross-platform commands & config guide
+├── config/                     # External JSON Configuration (Loose Coupling)
+│   ├── companies.json          # Target companies, CLI aliases & official ATS domains
+│   ├── skills.json             # Search terms & skill matching/tagging rules
+│   └── settings.json           # Default CLI filters (days, experience, location, sources)
+└── genai_jobs/                 # Core Python Package
     ├── __init__.py             # Package version export (__version__)
-    ├── __main__.py             # Module entry point for `python -m genai_jobs`
-    ├── cli.py                  # Typer CLI interface, flags, validation & logging setup
-    ├── config.py               # Pydantic config schemas, directory discovery & JSON loader
-    ├── constants.py            # Dynamic configuration bridge & runtime reload support
-    ├── models.py               # JobPosting Pydantic data model, dedup key & display helpers
-    ├── pipeline.py             # Concurrent orchestrator, post-filtering & Rich terminal output
+    ├── __main__.py             # Enables `python -m genai_jobs`
+    ├── cli.py                  # Typer CLI interface, flags, validation & logging
+    ├── config.py               # Pydantic config schemas, discovery & JSON loader
+    ├── constants.py            # Dynamic config bridge & runtime reload support
+    ├── models.py               # JobPosting Pydantic model, dedup key & display helpers
+    ├── pipeline.py             # Concurrent orchestrator, post-filtering & Rich output
     ├── engines/                # Career-Portal Job Fetching Engines
-    │   ├── __init__.py         # Re-exports Direct ATS, Dork & Amazon API fetchers
-    │   ├── amazon_api.py       # Amazon Jobs public JSON API fetcher
-    │   ├── ats_engine.py       # 23 direct career portal APIs (Google, Workday, Oracle, GS, EY, ZS Associates, Synopsys, Phenom, Eightfold)
-    │   └── dork_engine.py      # Parallel DuckDuckGo site-restricted career-portal dorking engine
-    └── utils/                  # Shared Domain Filtering & Anti-Bot Utilities
-        ├── __init__.py         # Re-exports filter, location & experience helpers
-        ├── filters.py          # Company resolution, GenAI matching, India location & exp parser
-        └── security.py         # Browser fingerprinting, stealth headers & jitter delays
+    │   ├── __init__.py         # Exports Direct ATS, Dork & Amazon API fetchers
+    │   ├── amazon_api.py       # Amazon Jobs JSON API fetcher (enforces SDE-1 only)
+    │   ├── ats_engine.py       # 23 direct career-portal APIs (Google, Workday, Oracle, GS, EY, ZS, Synopsys, Phenom, Eightfold)
+    │   └── dork_engine.py      # Parallel DuckDuckGo site-restricted ATS dorking engine
+    └── utils/                  # Filtering & Anti-Bot Utilities
+        ├── __init__.py         # Re-exports filter, location, Amazon SDE-1 & exp helpers
+        ├── filters.py          # Company resolution, GenAI matching, India location, exp parser & is_amazon_sde1
+        └── security.py         # Browser User-Agent rotation, stealth headers & jitter delays
 ```
-
----
-
-## 📖 Codebase Guide: What Each File Contains
-
-> Every function, property, validator, and nested helper across `genai_jobs/` (82 functions total) includes a structured Python docstring specifying its exact behavior, inputs (`Args:`), and outputs (`Returns:` / `Raises:`).
-
-### Execution Flow at a Glance
-
-```text
-genai_jobs/cli.py (or __main__.py)
-   ├── loads external config via genai_jobs/config.py & genai_jobs/constants.py
-   └── calls genai_jobs/pipeline.py :: run_pipeline()
-         ├── runs active career-portal engines concurrently (ThreadPoolExecutor):
-         │     ├── genai_jobs/engines/amazon_api.py     (Amazon JSON API)
-         │     ├── genai_jobs/engines/ats_engine.py     (23 direct career portal APIs/SSR)
-         │     └── genai_jobs/engines/dork_engine.py    (DuckDuckGo site-restricted ATS dorking)
-         ├── engines normalize hits into genai_jobs/models.py :: JobPosting
-         │     └── using genai_jobs/utils/filters.py (company, GenAI, location, exp, skills)
-         │     └── and genai_jobs/utils/security.py (stealth headers, jitter delays)
-         └── merges, deduplicates, filters, sorts, and renders table + URLs in terminal via:
-               └── genai_jobs/pipeline.py :: render_rich_table()
-```
-
----
-
-### 1. Root & Packaging Files
-
-| File | Responsibility & Key Contents |
-|---|---|
-| [`.gitignore`](.gitignore) | Prevents committing local virtual environments (`.venv/`, `venv/`, `env/`), `.env` secrets, Python caches & build artifacts (`__pycache__/`, `*.egg-info/`, `dist/`, `build/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`), logs, and OS/IDE files (`.DS_Store`, `.vscode/`, `.idea/`). |
-| [`pyproject.toml`](pyproject.toml) | PEP 517/621 build specification (`setuptools.build_meta`), package metadata (`genai-jobs` v1.0.0, Python `>=3.10`), runtime dependencies (`ddgs`, `typer`, `rich`, `httpx`, `tenacity`, `pydantic`), and `[project.scripts]` entry point (`genai-jobs = "genai_jobs.cli:app"`). |
-| [`genai-jobs`](genai-jobs) | Executable Bash wrapper script that delegates directly to `.venv/bin/genai-jobs` so the CLI can be run with `./genai-jobs` without manually activating the virtual environment. |
-| [`README.md`](README.md) | Project overview, installation instructions, CLI usage examples, configuration reference, and this file-by-file architecture guide. |
-
----
-
-### 2. External Configuration (`config/`)
-
-| File | Responsibility & Key Contents |
-|---|---|
-| [`config/companies.json`](config/companies.json) | Holds the `companies` array of 38 target organizations. Each entry specifies canonical `name`, optional CLI shorthand `aliases`, and official `ats_domains` (career portal hostnames/paths for ATS dorking and URL matching). |
-| [`config/skills.json`](config/skills.json) | Holds `search_terms` (`Generative AI`, `Agentic AI`, `LLM`, `RAG` — shared as the single source of truth across all engines) and `skills_detection` (keyword variants used for matching and tagging `Generative AI`, `Agentic AI`, `LLM`, and `RAG`). |
-| [`config/settings.json`](config/settings.json) | Holds lightweight CLI runtime defaults: `default_days` (`7`), `default_experience` (`"<4"`), `strict_experience` (`true`), `default_location` (`"India"`), `default_max_results` (`0`), and `default_sources` (`"all"`). |
-
----
-
-### 3. Core Application & Entry Points (`genai_jobs/`)
-
-| File | Responsibility & Key Contents |
-|---|---|
-| [`genai_jobs/__init__.py`](genai_jobs/__init__.py) | Package initializer; defines and exports `__version__` (`"1.0.0"`). |
-| [`genai_jobs/__main__.py`](genai_jobs/__main__.py) | Module execution entry point enabling `python -m genai_jobs`; imports and invokes `app()` from `genai_jobs.cli`. |
-| [`genai_jobs/cli.py`](genai_jobs/cli.py) | Typer CLI definition (`app` and `main()`). Parses and validates CLI flags (`--company`/`-c`, `--location`/`-l`, `--days`/`-d`, `--max-results`/`-m`, `--experience`/`-x`, `--strict-exp`/`--allow-unstated`, `--sources`/`-s`, `--config-dir`, `--list-companies`, `--verbose`/`-v`), configures logging (`_configure_logging()`), handles `--config-dir` reloads, resolves target companies, and invokes `run_pipeline()`. |
-| [`genai_jobs/config.py`](genai_jobs/config.py) | Pydantic config schemas (`CompanyItem`, `CompaniesConfig`, `SkillsConfig`, `SettingsConfig`, `AppConfig`), config directory discovery (`discover_config_dir()` checking `--config-dir` → `GENAI_JOBS_CONFIG_DIR` → `./config` → repo `config/`), safe JSON reader (`_load_json_file()`), singleton loader (`load_config()`, `get_config()`), and dynamic accessors (`get_canonical_companies()`, `get_company_aliases()`, `get_alias_to_canonical()`, `get_company_ats_domains()`, `get_search_terms()`, `get_match_keywords()`, `get_skills_detection_map()`). |
-| [`genai_jobs/constants.py`](genai_jobs/constants.py) | Loose-coupling configuration bridge exposing module-level constants (`CANONICAL_COMPANIES`, `COMPANY_ALIASES`, `ALIAS_TO_CANONICAL`, `COMPANY_ATS_DOMAINS`, `SEARCH_TERMS`, `MATCH_KEYWORDS`, `SKILLS_DETECTION_MAP`, `DEFAULT_*`, `MAX_RETRY_ATTEMPTS`, `AMAZON_JOBS_API`) along with `refresh_constants()` and `__getattr__()` for live reloads. |
-| [`genai_jobs/models.py`](genai_jobs/models.py) | Shared Pydantic `JobPosting` model returned by all engines. Stores `company`, `title`, `location`, `date_posted`, `url`, `source`, `description_snippet`, `exp_min`, `exp_max`, and `skills`; provides field validators (`_clean_url`, `_strip_strings`), `dedup_key` for cross-engine deduplication, and display properties (`date_str`, `experience_label`, `skills_label`). |
-| [`genai_jobs/pipeline.py`](genai_jobs/pipeline.py) | Pipeline orchestrator (`run_pipeline()`) and terminal renderer (`render_rich_table()`). Determines active career-portal engines based on `--sources` (`ats` / `dork` / `all`) and target companies (scoping DDG Dork in `-s all` mode to the 14 non-direct-API companies to avoid redundant queries), runs up to 3 concurrent workers (`_run_amazon`, `_run_ats`, `_run_dork` with Rich `_cb` callbacks) via `ThreadPoolExecutor` with Rich progress bars (`_make_progress()`), merges/deduplicates (`_deduplicate()`), sorts (`_sort_jobs()` by company name ↑ and posting date ↓), enforces strict India location and minimum-experience rules (`_filter_by_experience()`), and prints the Rich table + full clickable Job URLs in the terminal. |
-
----
-
-### 4. Job Fetching Engines (`genai_jobs/engines/`)
-
-| File | Responsibility & Key Contents |
-|---|---|
-| [`genai_jobs/engines/__init__.py`](genai_jobs/engines/__init__.py) | Package exports for `fetch_via_ats_apis`, `fetch_via_dork`, and `fetch_amazon_jobs`. |
-| [`genai_jobs/engines/amazon_api.py`](genai_jobs/engines/amazon_api.py) | **Amazon JSON API Engine** (`fetch_amazon_jobs()`, `get_amazon_search_terms()`). Queries `amazon.jobs/en/search.json` (`_get_amazon_page()` with Tenacity retries and stealth headers) across the configured `search_terms` (`Generative AI`, `Agentic AI`, `LLM`, `RAG`), handles offset pagination (`_MAX_OFFSET_PER_TERM`), URL normalization (`_build_url()`), cutoff dates (`_parse_date()`), location verification (`_location_matches()`), and converts hits into `JobPosting` objects (`_build_job()`). |
-| [`genai_jobs/engines/ats_engine.py`](genai_jobs/engines/ats_engine.py) | **Direct Career Portal API Engine** (`fetch_via_ats_apis()`, `get_supported_ats_companies()`, `_get_ats_search_terms()`, plus shared helpers `_strip_html()`, `_parse_relative_date()`, `_is_senior_title()`). Concurrently queries 23 official ATS endpoints/SSR pages directly using configured `search_terms`: <br>• **Google Careers** (`_fetch_google_careers()`): extracts `AF_initDataCallback` JSON payloads.<br>• **Workday CXS** (`_fetch_workday_company()`, `_WORKDAY_PORTALS`): Adobe, Micron, Berkadia, Disney, Invesco, Quantiphi, Wells Fargo, Caterpillar, Visa, Mastercard with concurrent `_hydrate()` detail fetching.<br>• **Oracle Cloud HCM** (`_fetch_oracle_company()`, `_ORACLE_PORTALS`): JP Morgan Chase, CHUBB, Honeywell, American Express, BNY Mellon REST APIs (with server-side India country filtering and `POSTING_DATES_DESC` pagination) + concurrent `_hydrate()` requisition detail fetching.<br>• **Goldman Sachs** (`_fetch_goldman_sachs()`): Higher GraphQL API (`GetRoles`).<br>• **EY** (`_fetch_ey_portal()`): `careers.ey.com` SuccessFactors newest-first search + concurrent `_hydrate()` detail scraping.<br>• **ZS Associates** (`_fetch_zs_portal()`): `jobs.zs.com/api/jobs` iCIMS Jibe JSON API with newest-first pagination.<br>• **Synopsys** (`_fetch_synopsys_portal()`): TalentBrew endpoint on `careers.synopsys.com` + concurrent `_hydrate()` detail scraping.<br>• **Phenom People SSR** (`_fetch_phenom_company()`, `_PHENOM_PORTALS`): eBay and HPE `phApp.ddo` payloads.<br>• **Eightfold PCSX** (`_fetch_eightfold_company()`, `_EIGHTFOLD_PORTALS`): Ericsson `/api/pcsx/search` + concurrent `_hydrate()` `position_details` fetching. |
-| [`genai_jobs/engines/dork_engine.py`](genai_jobs/engines/dork_engine.py) | **DuckDuckGo Career-Portal ATS Dorking Engine** (`fetch_via_dork()`, `_query_one()`). Builds `site:`-restricted queries exclusively from configured `ats_domains` + dynamic `search_terms` (`_build_genai_ddg_clause()`) + location clauses (`_build_dork_query()`), skips companies without configured career domains, executes searches via `ddgs` (`_ddg_search()`) in parallel with rate-limit retry and circuit breaking (`rl_state`), filters out career landing/blog pages, verifies exact domain ownership (`company_from_url()`), enforces India location & GenAI matching, and parses snippets into `JobPosting` objects (`_parse_ddg_result()`). |
-
----
-
-### 5. Shared Utilities (`genai_jobs/utils/`)
-
-| File | Responsibility & Key Contents |
-|---|---|
-| [`genai_jobs/utils/__init__.py`](genai_jobs/utils/__init__.py) | Re-exports company, GenAI, location, and experience utilities from `filters.py`. |
-| [`genai_jobs/utils/filters.py`](genai_jobs/utils/filters.py) | Central filtering and normalization logic driven by `config/*.json`: <br>• **Company normalization**: `resolve_company()`, `validate_company_names()`, `company_from_url()`.<br>• **GenAI & skill matching**: `_clean_description_for_matching()` (strips corporate PR/branding taglines, Copilot office-productivity blurbs, and HR disclaimers), `_has_keyword()` (word-boundary regex), `matches_genai()`, `detect_skills()`, `truncate()`.<br>• **India location verification**: `is_india_location()` (strictly accepts Indian cities/states/pan-India while rejecting foreign-only roles) and `extract_india_location()` (normalizes city names e.g. `Bangalore` → `Bengaluru, India`).<br>• **Experience parsing & filtering**: `infer_seniority_from_title()`, `parse_experience()`, `parse_experience_filter()`, `job_matches_experience()` (evaluates minimum required years against filter bounds so ranges like `3–5 yr` match `<4`). |
-| [`genai_jobs/utils/security.py`](genai_jobs/utils/security.py) | Anti-bot and HTTP stealth helpers: `get_stealth_headers()` (rotates Chrome/Safari/Firefox User-Agents, `sec-ch-ua`, and `Sec-Fetch-*` headers) and `apply_jitter_delay()` (randomized request pacing). |
